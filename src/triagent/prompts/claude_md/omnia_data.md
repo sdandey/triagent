@@ -34,6 +34,96 @@ You are assisting the Omnia Data team with Azure DevOps operations in the Audit 
 | cortexpy | master | cortexpy | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/cortexpy` |
 | analytic-notebooks | master | analytic-notebooks | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/analytic-notebooks` |
 
+### Repository Ownership & Contributors
+
+This section shows the owning team and top contributors (by commit count from develop branch, last 6 months) for each repository. Use this to identify subject matter experts for investigation.
+
+#### data-exchange-service
+- **POD**: Data Acquisition and Preparation / Data In Use | **Team**: Alpha, Kilo
+- **Top Contributors**: Santhosh Patnam (27), Jitendra Nadkar (14) [Alpha], Kumbhalkar Mahesh (13) [Kilo], Satish Jare (11), Shrivastava Rahul (8)
+
+#### cortex-datamanagement-services
+- **POD**: Data Management and Activation | **Team**: Gamma
+- **Top Contributors**: Katz Yoni (14) [Gamma], Pratap Anuj (11) [Gamma], Vikas J (7), Kumar Shubham (7), Shaikh Faisal (6)
+
+#### engagement-service
+- **POD**: Data Acquisition and Preparation / Data Mgmt & Activation | **Team**: Alpha, Skyrockets
+- **Top Contributors**: Awasthi Harshal (32) [Alpha], Dhage Priyanka (25) [Skyrockets], Nadkar Jitendra (7) [Alpha], Kolhe Rakesh (5), Jadhav Anurag (4) [Skyrockets]
+
+#### security-service
+- **POD**: Data Management and Activation | **Team**: Skyrockets
+- **Top Contributors**: Jadhav Anurag (61) [Skyrockets], Awasthi Harshal (19) [Alpha], Kumar Shubham (6), Kolhe Rakesh (4), Dhage Priyanka (3) [Skyrockets]
+
+#### data-kitchen-service
+- **POD**: Data Acquisition and Preparation | **Team**: Beta, Megatron
+- **Top Contributors**: Shinde Rohini (38) [Beta], Pandey Divy Mohan (20) [Megatron], Arumugasamy Ilango (11), Hassan Abul (6), Nallamotu Teja Sri (4)
+
+#### analytic-template-service
+- **POD**: Data In Use | **Team**: Tera
+- **Top Contributors**: Salunke Amol Rohidas (30) [Tera], Rajpoot Mahendra Singh (29) [Tera], Bhujbal Sanket Nitin (24), Jadhav Dhanashri Niraj (9), Shelke Rahul Somnath (8)
+
+#### notification-service
+- **POD**: Data Acquisition and Preparation / Data Mgmt & Activation | **Team**: Beta, Skyrockets
+- **Top Contributors**: Bagchi Indrajit (21) [Beta], Jadhav Anurag (9) [Skyrockets], Agrawal Sakshi (6) [Skyrockets], Rohan Prabhu (5), Borse Rajendra (4)
+
+#### staging-service
+- **POD**: Data Management and Activation / Data Acquisition and Preparation | **Team**: Gamma, Alpha
+- **Top Contributors**: Ankireddy Raja Mouli (44) [Gamma], Dey Debdeep (14) [Alpha/Beta], Saurabh (11), Gajjar Rinkeshkumar (8) [Beta], Kumar Shubham (4)
+
+#### spark-job-management
+- **POD**: Data Acquisition and Preparation | **Team**: Alpha, Beta
+- **Top Contributors**: Dey Debdeep (49) [Alpha/Beta], Pandit Kunal (9) [Alpha], Sargar Dadasaheb (6) [Kilo], Gajjar Rinkeshkumar (4) [Beta], Shelar Amol (3)
+
+#### cortex-ui
+- **POD**: Data In Use | **Team**: Tera
+- **Top Contributors**: Rajpoot Mahendra Singh (12) [Tera], Killedar Sonali Bajirao (12) [Tera], Jadhav Dhanashri Niraj (10), Vikram Rajpurohit (7), Gaud Krishnakant Jagdish (7)
+
+#### client-service
+- **POD**: Data Acquisition and Preparation | **Team**: Beta
+- **Top Contributors**: Bagchi Indrajit (28) [Beta], Dipak Bhoi (18), Varma Sandeep (14) [Beta], Borse Rajendra (12), Gajjar Rinkeshkumar (6) [Beta]
+
+#### workpaper-service
+- **POD**: Data In Use | **Team**: Giga
+- **Top Contributors**: Patil Ajinkya U (16) [Giga], P ARUMUGAM (10) [Giga], Allada Srinivasarao (10), Singh Mukul Pratap (6), Nallamotu Teja Sri (5)
+
+#### async-workflow-framework
+- **POD**: Data Acquisition and Preparation / Data In Use | **Team**: Alpha, Giga
+- **Top Contributors**: Kolhe Rakesh (25) [Alpha], Patil Ajinkya U (7) [Giga], Borse Rajendra (6), Santhosh Patnam (5), Jadhav Anurag (4) [Skyrockets]
+
+#### sampling-service
+- **POD**: Data In Use | **Team**: Giga
+- **Top Contributors**: Santhosh Patnam (25), Shrivastava Rahul (16) [Giga], Rajendran Anbarasan (16) [Giga], Sekharamahanti Tarun Kumar (4) [Tera/Kilo], Kumbhalkar Mahesh (3) [Kilo]
+
+#### localization-service
+- **POD**: Omnia JE / Data Mgmt & Activation | **Team**: Justice League, Skyrockets
+- **Top Contributors**: Bhat Abdul Hamid (4) [Justice League], Jadhav Anurag (3) [Skyrockets], Agrawal Sakshi (3) [Skyrockets], Ziparu Dipak (2), Dhage Priyanka (2) [Skyrockets]
+
+#### scheduler-service
+- **POD**: Data Acquisition and Preparation | **Team**: Alpha
+- **Top Contributors**: Awasthi Harshal (7) [Alpha], Kaviya K J (6), Bhat Abdul Hamid (4) [Justice League], Padhi (3), Agrawal Sakshi (2) [Skyrockets]
+
+#### cortexpy
+- **POD**: Data Management and Activation / Data Acquisition and Preparation | **Team**: Delta, Beta
+- **Top Contributors**: Bandi Melvin (12) [Delta], Sai Chimata Giridhar (10) [Beta], Kuderakar Chetan R (10) [Delta], Ganapathi Ekambaram (9), Somasundaram Thirunavukkarasu (7) [Delta]
+
+#### analytic-notebooks
+- **POD**: Data Acquisition and Preparation | **Team**: Beta
+- **Top Contributors**: Sai Chimata Giridhar (15) [Beta], William Phillips (14), Gaikwad Manjusha (8) [Beta], Ramireddy (6), Bandi Melvin (6) [Delta]
+
+### Key Cross-Repository Contributors
+
+These contributors work across multiple repositories and are valuable resources for cross-functional issues:
+
+| Contributor | Team | Repositories | Total Commits |
+|-------------|------|--------------|---------------|
+| Jadhav, Anurag | Skyrockets | 6 repos | 80+ |
+| Awasthi, Harshal | Alpha | 5 repos | 75+ |
+| Dey, Debdeep | Alpha/Beta | 2 repos | 63 |
+| Bagchi, Indrajit | Beta | 2 repos | 49 |
+| Sai, Chimata Giridhar | Beta | 3 repos | 35+ |
+| Borse, Rajendra | (Cross-team) | 4 repos | 28+ |
+| Gajjar, Rinkeshkumar | Beta | 4 repos | 26+ |
+
 ### Git Commands for Investigation
 
 #### Clone a repository
