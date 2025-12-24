@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import typer
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
@@ -50,6 +52,80 @@ def parse_slash_command(user_input: str) -> tuple[str, list[str]]:
     args = parts[1:] if len(parts) > 1 else []
 
     return command, args
+
+
+def detect_investigation_request(user_input: str) -> tuple[str, int] | None:
+    """Detect if user wants to investigate a defect/incident.
+
+    Args:
+        user_input: Raw user input
+
+    Returns:
+        Tuple of (work_item_type, work_item_id) or None if not an investigation request
+    """
+    patterns = [
+        r"investigate\s+(defect|incident|bug)\s*#?(\d+)",
+        r"look\s+into\s+(defect|incident|bug)\s*#?(\d+)",
+        r"analyze\s+(defect|incident|bug)\s*#?(\d+)",
+        r"check\s+(defect|incident|bug)\s*#?(\d+)",
+        r"debug\s+(defect|incident|bug)\s*#?(\d+)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, user_input.lower())
+        if match:
+            return (match.group(1), int(match.group(2)))
+    return None
+
+
+def enhance_investigation_prompt(
+    user_input: str,
+    work_item_type: str,
+    work_item_id: int,
+) -> str:
+    """Enhance the user's investigation request with detailed instructions.
+
+    Args:
+        user_input: Original user input
+        work_item_type: Type of work item (defect, incident, bug)
+        work_item_id: Work item ID
+
+    Returns:
+        Enhanced prompt with investigation instructions
+    """
+    return f"""{user_input}
+
+## Investigation Instructions
+
+You are investigating {work_item_type.capitalize()} #{work_item_id}. Please follow this workflow:
+
+1. **Fetch Work Item Details**: Use the Azure DevOps MCP tools to get the work item:
+   - Use `mcp__azure-devops__wit_get_work_item` with id={work_item_id}
+   - Get the title, description, state, priority, and assigned to
+   - Also fetch comments using `mcp__azure-devops__wit_list_work_item_comments`
+
+2. **Identify Scope**: Ask me to specify:
+   - Which microservice or component is affected?
+   - What environment should I investigate (DEV, QAS, STG, PRD)?
+   - What is the timeframe of the issue?
+
+3. **Read Telemetry Config**: Read the team memory file at:
+   `src/triagent/prompts/claude_md/omnia_data.md`
+   - Get the Log Analytics Workspace for the environment
+   - Find the CloudRoleName for the affected service
+
+4. **Generate Kusto Queries**: Based on the defect details, generate queries for:
+   - AppExceptions - search for error patterns
+   - AppRequests - look for failed requests
+   - AppDependencies - check for dependency failures
+   - AppTraces - search for related log messages
+
+5. **Present Findings**: Provide:
+   - Summary of the defect
+   - Suggested Kusto queries to run
+   - Azure Portal link for the Log Analytics workspace
+   - Recommended next steps
+"""
 
 
 def handle_slash_command(
@@ -160,6 +236,17 @@ def interactive_loop(
                 if not should_continue:
                     break
                 continue
+
+            # Check for investigation request
+            investigation = detect_investigation_request(user_input)
+            if investigation:
+                work_item_type, work_item_id = investigation
+                console.print(
+                    f"[cyan]Detected investigation request for {work_item_type.capitalize()} #{work_item_id}[/cyan]"
+                )
+                user_input = enhance_investigation_prompt(
+                    user_input, work_item_type, work_item_id
+                )
 
             # Send message to agent with tool support
             console.print()

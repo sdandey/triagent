@@ -69,6 +69,8 @@ class TriagentCredentials:
     # Azure Foundry credentials
     anthropic_foundry_api_key: str = ""
     anthropic_foundry_resource: str = ""
+    anthropic_foundry_base_url: str = ""
+    anthropic_foundry_model: str = "claude-opus-4-5"
 
     # ADO credentials
     ado_pat: str = ""
@@ -82,6 +84,8 @@ class TriagentCredentials:
             "databricks_model": self.databricks_model,
             "anthropic_foundry_api_key": self.anthropic_foundry_api_key,
             "anthropic_foundry_resource": self.anthropic_foundry_resource,
+            "anthropic_foundry_base_url": self.anthropic_foundry_base_url,
+            "anthropic_foundry_model": self.anthropic_foundry_model,
             "ado_pat": self.ado_pat,
         }
 
@@ -98,6 +102,8 @@ class TriagentCredentials:
             databricks_model=data.get("databricks_model", "databricks-claude-sonnet-4-5"),
             anthropic_foundry_api_key=data.get("anthropic_foundry_api_key", ""),
             anthropic_foundry_resource=data.get("anthropic_foundry_resource", ""),
+            anthropic_foundry_base_url=data.get("anthropic_foundry_base_url", ""),
+            anthropic_foundry_model=data.get("anthropic_foundry_model", "claude-opus-4-5"),
             ado_pat=data.get("ado_pat", ""),
         )
 

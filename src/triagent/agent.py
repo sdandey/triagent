@@ -41,6 +41,167 @@ def _get_databricks_token(host: str) -> str | None:
         return None
 
 
+class AzureFoundryClient:
+    """Custom client for Azure AI Foundry Claude API."""
+
+    def __init__(self, credentials: TriagentCredentials) -> None:
+        """Initialize Azure Foundry client.
+
+        Args:
+            credentials: Triagent credentials with Azure Foundry config
+        """
+        self.base_url = credentials.anthropic_foundry_base_url
+        self.model = credentials.anthropic_foundry_model
+        self.api_key = credentials.anthropic_foundry_api_key
+
+    def send_message(
+        self,
+        messages: list[dict],
+        system: str | None = None,
+        max_tokens: int = 4096,
+        tools: list[dict] | None = None,
+    ) -> dict:
+        """Send a message to Azure Foundry Claude endpoint.
+
+        Args:
+            messages: List of message dicts with role and content
+            system: Optional system prompt
+            max_tokens: Maximum tokens to generate
+            tools: Optional list of tool definitions
+
+        Returns:
+            Full response dictionary from the API (Anthropic format)
+        """
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+        }
+
+        # Build request body (Anthropic format)
+        body: dict = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+
+        # Add system prompt if provided
+        if system:
+            body["system"] = system
+
+        # Add tools if provided (Anthropic format)
+        if tools:
+            body["tools"] = tools
+
+        response = httpx.post(self.base_url, headers=headers, json=body, timeout=120)
+        response.raise_for_status()
+
+        return response.json()
+
+    def send_message_with_error_info(
+        self,
+        messages: list[dict],
+        system: str | None = None,
+        max_tokens: int = 4096,
+        tools: list[dict] | None = None,
+    ) -> tuple[dict | None, "ErrorContext | None"]:
+        """Send a message and return detailed error info if failed.
+
+        Args:
+            messages: List of message dicts with role and content
+            system: Optional system prompt
+            max_tokens: Maximum tokens to generate
+            tools: Optional list of tool definitions
+
+        Returns:
+            Tuple of (response_dict, error_context)
+            - On success: (response, None)
+            - On error: (None, ErrorContext)
+        """
+        from triagent.tools.error_recovery import ErrorContext, classify_http_error
+
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+        }
+
+        body: dict = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+
+        if system:
+            body["system"] = system
+
+        if tools:
+            body["tools"] = tools
+
+        try:
+            response = httpx.post(self.base_url, headers=headers, json=body, timeout=120)
+            response.raise_for_status()
+            return response.json(), None
+        except httpx.HTTPStatusError as e:
+            error_type = classify_http_error(e.response.status_code, e.response.text)
+            return None, ErrorContext(
+                status_code=e.response.status_code,
+                error_message=e.response.text,
+                error_type=error_type,
+            )
+
+    def extract_text(self, response: dict) -> str:
+        """Extract text content from Anthropic-style response.
+
+        Args:
+            response: The API response dictionary
+
+        Returns:
+            The text content from the response
+        """
+        content = response.get("content", [])
+        text_parts = []
+        for block in content:
+            if block.get("type") == "text":
+                text_parts.append(block.get("text", ""))
+        return "".join(text_parts)
+
+    def has_tool_calls(self, response: dict) -> bool:
+        """Check if the response contains tool calls.
+
+        Args:
+            response: The API response dictionary
+
+        Returns:
+            True if there are tool calls to process
+        """
+        content = response.get("content", [])
+        for block in content:
+            if block.get("type") == "tool_use":
+                return True
+        return False
+
+    def get_tool_calls(self, response: dict) -> list[dict]:
+        """Extract tool calls from the response.
+
+        Args:
+            response: The API response dictionary
+
+        Returns:
+            List of tool call dictionaries with id, name, and arguments
+        """
+        tool_calls = []
+        content = response.get("content", [])
+        for block in content:
+            if block.get("type") == "tool_use":
+                tool_calls.append({
+                    "id": block.get("id", ""),
+                    "name": block.get("name", ""),
+                    "arguments": block.get("input", {}),
+                })
+        return tool_calls
+
+
 class DatabricksClient:
     """Custom client for Databricks Foundation Model API."""
 
@@ -244,8 +405,10 @@ class AgentSession:
     messages: list[ConversationMessage] = field(default_factory=list)
     _client: Anthropic | None = None
     _databricks_client: DatabricksClient | None = None
+    _azure_foundry_client: AzureFoundryClient | None = None
     _model_override: str | None = None
     _use_databricks: bool = False
+    _use_azure_foundry: bool = False
 
     def __post_init__(self) -> None:
         """Initialize the client."""
@@ -261,11 +424,10 @@ class AgentSession:
             self._databricks_client = DatabricksClient(credentials)
             self._model_override = credentials.databricks_model
         elif credentials.api_provider == "azure_foundry" and credentials.anthropic_foundry_api_key:
-            # Azure Foundry uses environment variables
-            os.environ["CLAUDE_CODE_USE_FOUNDRY"] = "1"
-            os.environ["ANTHROPIC_FOUNDRY_API_KEY"] = credentials.anthropic_foundry_api_key
-            os.environ["ANTHROPIC_FOUNDRY_RESOURCE"] = credentials.anthropic_foundry_resource
-            self._client = Anthropic()
+            # Use custom Azure Foundry client
+            self._use_azure_foundry = True
+            self._azure_foundry_client = AzureFoundryClient(credentials)
+            self._model_override = credentials.anthropic_foundry_model
         else:
             # Default: Direct Anthropic API
             self._client = Anthropic()
@@ -273,7 +435,7 @@ class AgentSession:
     @property
     def client(self) -> Anthropic:
         """Get or create the Anthropic client."""
-        if self._client is None and not self._use_databricks:
+        if self._client is None and not self._use_databricks and not self._use_azure_foundry:
             self._setup_client()
         return self._client  # type: ignore
 
@@ -323,6 +485,14 @@ class AgentSession:
                     max_tokens=4096,
                 )
                 response_text = self._databricks_client.extract_text(response)
+            elif self._use_azure_foundry and self._azure_foundry_client:
+                # Use custom Azure Foundry client
+                response = self._azure_foundry_client.send_message(
+                    messages=self.get_messages_for_api(),
+                    system=self.system_prompt,
+                    max_tokens=4096,
+                )
+                response_text = self._azure_foundry_client.extract_text(response)
             else:
                 # Use Anthropic SDK
                 response = self.client.messages.create(
@@ -372,6 +542,16 @@ class AgentSession:
                     max_tokens=4096,
                 )
                 response_text = self._databricks_client.extract_text(response)
+                self.add_assistant_message(response_text)
+                yield response_text
+            elif self._use_azure_foundry and self._azure_foundry_client:
+                # Azure Foundry doesn't support streaming, yield entire response
+                response = self._azure_foundry_client.send_message(
+                    messages=self.get_messages_for_api(),
+                    system=self.system_prompt,
+                    max_tokens=4096,
+                )
+                response_text = self._azure_foundry_client.extract_text(response)
                 self.add_assistant_message(response_text)
                 yield response_text
             else:
@@ -549,8 +729,130 @@ class AgentSession:
                     yield response_text
                     return
 
+                elif self._use_azure_foundry and self._azure_foundry_client:
+                    # Use Azure Foundry with Anthropic format
+                    response, error_ctx = self._azure_foundry_client.send_message_with_error_info(
+                        messages=api_messages,
+                        system=self.system_prompt,
+                        max_tokens=4096,
+                        tools=[AZURE_CLI_TOOL],
+                    )
+
+                    # Handle API error with potential retry
+                    if error_ctx is not None:
+                        if (
+                            error_ctx.error_type == ErrorType.CONTEXT_TOO_LARGE
+                            and attempt <= retry_config.max_attempts
+                        ):
+                            # Notify retry
+                            if on_retry:
+                                on_retry(attempt)
+
+                            # Prepare recovery context
+                            error_ctx.attempt_number = attempt
+                            error_ctx.original_command = last_command
+                            error_ctx.previous_output = last_output
+
+                            # Fetch CLI help if available
+                            help_text = None
+                            if retry_config.enable_help_lookup and last_command:
+                                cmd_base = extract_command_base(last_command)
+                                help_text = get_cli_help(cmd_base)
+
+                            # Generate recovery instruction
+                            recovery_msg = generate_recovery_instruction(error_ctx, help_text)
+
+                            # Add recovery instruction to messages (Anthropic format)
+                            api_messages.append({
+                                "role": "user",
+                                "content": recovery_msg,
+                            })
+
+                            # Continue loop to retry
+                            continue
+
+                        # Non-recoverable error or max retries exceeded
+                        error_snippet = error_ctx.error_message[:300] if error_ctx.error_message else "Unknown error"
+                        yield f"[Error] API returned {error_ctx.status_code}: {error_snippet}"
+                        return
+
+                    # Success path - process response
+                    if self._azure_foundry_client.has_tool_calls(response):
+                        tool_calls = self._azure_foundry_client.get_tool_calls(response)
+
+                        # Add assistant message with content array to conversation (Anthropic format)
+                        # This preserves both text and tool_use blocks
+                        api_messages.append({
+                            "role": "assistant",
+                            "content": response.get("content", []),
+                        })
+
+                        # Collect all tool results for batch response
+                        tool_results = []
+
+                        # Execute each tool call
+                        for tool_call in tool_calls:
+                            tool_name = tool_call["name"]
+                            tool_id = tool_call["id"]
+
+                            if tool_name == "execute_azure_cli":
+                                command = tool_call["arguments"].get("command", "")
+                                last_command = command  # Track for retry
+
+                                # Notify tool start
+                                if on_tool_start:
+                                    on_tool_start(tool_name, command)
+
+                                # Execute the command
+                                result = execute_azure_cli(
+                                    command,
+                                    confirm_callback=confirm_callback,
+                                )
+
+                                # Notify tool end
+                                if on_tool_end:
+                                    on_tool_end(tool_name, result["success"])
+
+                                # Prepare tool result content
+                                tool_result_content = (
+                                    result["output"] if result["success"]
+                                    else f"Error: {result['error']}"
+                                )
+                                last_output = tool_result_content  # Track for retry
+
+                                # Adaptive truncation based on attempt number
+                                max_output_len = 4000 if attempt == 1 else retry_config.aggressive_truncation_threshold
+                                if len(tool_result_content) > max_output_len:
+                                    tool_result_content = truncate_aggressively(
+                                        tool_result_content, max_output_len
+                                    )
+
+                                # Collect tool result (Anthropic format)
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_id,
+                                    "content": tool_result_content,
+                                })
+
+                        # Add all tool results as a single user message (Anthropic format)
+                        api_messages.append({
+                            "role": "user",
+                            "content": tool_results,
+                        })
+
+                        # Reset attempt counter on successful tool execution
+                        attempt = 0
+                        # Continue loop to get next response
+                        continue
+
+                    # No tool calls - extract final text
+                    response_text = self._azure_foundry_client.extract_text(response)
+                    self.add_assistant_message(response_text)
+                    yield response_text
+                    return
+
                 else:
-                    # Non-Databricks path - just use regular send for now
+                    # Non-Databricks, non-Azure Foundry path - use Anthropic SDK
                     response = self.client.messages.create(
                         model=self.effective_model,
                         max_tokens=4096,

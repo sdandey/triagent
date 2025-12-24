@@ -322,27 +322,108 @@ def _configure_databricks(
         console.print()  # Add spacing before retry
 
 
+def _test_azure_foundry_connection(
+    console: Console,
+    credentials: TriagentCredentials,
+) -> bool:
+    """Test Azure AI Foundry API connection.
+
+    Args:
+        console: Rich console for output
+        credentials: Credentials to test
+
+    Returns:
+        True if connection successful, False otherwise
+    """
+    import httpx
+
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": credentials.anthropic_foundry_api_key,
+            "anthropic-version": "2023-06-01",
+        }
+
+        body = {
+            "model": credentials.anthropic_foundry_model,
+            "max_tokens": 50,
+            "messages": [{"role": "user", "content": "Say hi in 5 words"}],
+        }
+
+        response = httpx.post(
+            credentials.anthropic_foundry_base_url,
+            headers=headers,
+            json=body,
+            timeout=60,
+        )
+
+        if response.status_code == 200:
+            return True
+        else:
+            error_msg = response.text[:200] if response.text else f"HTTP {response.status_code}"
+            console.print(f"[red]✗ Connection failed: {error_msg}[/red]")
+            return False
+    except Exception as e:
+        console.print(f"[red]✗ Connection failed: {e}[/red]")
+        return False
+
+
 def _configure_azure_foundry(
     console: Console,
     credentials: TriagentCredentials,
 ) -> TriagentCredentials:
     """Configure Azure AI Foundry API settings."""
-    console.print("[dim]Enter your Azure AI Foundry API credentials[/dim]")
-    console.print("[dim]Leave blank to skip (can configure later)[/dim]")
-    console.print()
+    while True:
+        console.print("[dim]Configure Azure AI Foundry API settings:[/dim]")
+        console.print("[dim]Press Enter to accept default values shown in brackets[/dim]")
+        console.print()
 
-    api_key = prompt("Azure Foundry API Key: ", is_password=True).strip()
-    if api_key:
-        resource_name = prompt("Azure Foundry Resource Name: ").strip()
+        # Prompt for Base URL (required)
+        default_url = credentials.anthropic_foundry_base_url or "https://your-resource.services.ai.azure.com/anthropic/v1/messages"
+        base_url = prompt(f"Target URI [{default_url}]: ").strip()
+        if base_url:
+            credentials.anthropic_foundry_base_url = base_url
+        elif not credentials.anthropic_foundry_base_url:
+            console.print("[red]Target URI is required[/red]")
+            continue
 
+        # Prompt for API Key (required)
+        api_key = prompt("API Key: ", is_password=True).strip()
+        if not api_key:
+            console.print()
+            console.print("[yellow]Warning: No API key provided. You'll need to configure it later.[/yellow]")
+            return credentials
         credentials.anthropic_foundry_api_key = api_key
-        credentials.anthropic_foundry_resource = resource_name
 
-        console.print("[green]✓[/green] Azure Foundry credentials configured")
-    else:
-        console.print("[yellow]Skipped API configuration[/yellow]")
+        # Prompt for Model/Deployment name
+        default_model = credentials.anthropic_foundry_model or "claude-opus-4-5"
+        model = prompt(f"Deployment Name [{default_model}]: ").strip()
+        if model:
+            credentials.anthropic_foundry_model = model
 
-    return credentials
+        console.print()
+
+        # Test the connection
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            progress.add_task("Testing connection...")
+            success = _test_azure_foundry_connection(console, credentials)
+
+        if success:
+            console.print("[green]✓[/green] Connection successful!")
+            console.print("[green]✓[/green] Azure Foundry credentials configured")
+            return credentials
+
+        # Connection failed - offer retry
+        console.print()
+        if not confirm_prompt("Retry configuration?", default=True):
+            console.print("[yellow]Skipping connection test. You may need to reconfigure later.[/yellow]")
+            return credentials
+
+        console.print()  # Add spacing before retry
 
 
 def _step_team_selection(
