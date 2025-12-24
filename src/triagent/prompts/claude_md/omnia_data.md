@@ -52,8 +52,44 @@ git pull origin master
 #### Checkout release branch
 ```bash
 git fetch --all
-git checkout release-{version}
-git pull origin release-{version}
+git checkout RELEASE_{version}
+git pull origin RELEASE_{version}
+```
+
+---
+
+## Release Branch Strategy
+
+### Current Releases
+| Release | Status | Branch | Environments |
+|---------|--------|--------|--------------|
+| 9.5.x | **Production** | `RELEASE_9.5` | PROD, BCP, CNT1 |
+| 9.6.x | Development | `develop` | DEV, QAS, STG2 |
+
+### Investigation by Environment
+When investigating issues, use the appropriate branch based on the environment:
+
+| Environment | Release | Branch to Checkout |
+|-------------|---------|-------------------|
+| PROD, BCP, CNT1 | 9.5.x | `RELEASE_9.5` |
+| STG | 9.5.x | `RELEASE_9.5` |
+| STG2 | 9.6.x | `RELEASE_9.6` or `develop` |
+| DEV, DEV1, DEV2 | 9.6.x | `develop` |
+| QAS, QAS1, QAS2 | 9.6.x | `develop` |
+
+### Release Branch Commands
+```bash
+# For PROD investigation (9.5.x)
+cd ~/code/{repo-name}
+git fetch origin
+git checkout RELEASE_9.5
+git pull origin RELEASE_9.5
+
+# For DEV/QAS investigation (9.6.x)
+cd ~/code/{repo-name}
+git fetch origin
+git checkout develop
+git pull origin develop
 ```
 
 ---
@@ -255,3 +291,92 @@ AppTraces
 | project TimeGenerated, Message, SeverityLevel, AppRoleName
 | top 100 by TimeGenerated desc
 ```
+
+---
+
+## Team Information (PI21)
+
+### Current Program Increment
+- **PI21** (Program Increment 21)
+- **Future Release**: 9.6
+
+### Organizational Structure
+```
+Audit Cortex 2
+└── Omnia Data
+    ├── Omnia Data Acquisition
+    │   └── Galileo
+    ├── Omnia Data Management
+    │   ├── Data Acquisition and Preparation (POD)
+    │   │   ├── Alpha
+    │   │   ├── Beta
+    │   │   ├── Megatron
+    │   │   └── Support
+    │   └── Data Management and Activation (POD)
+    │       ├── Delta
+    │       ├── Gamma
+    │       └── Skyrockets
+    ├── Omnia Data Automation
+    │   ├── Omnia JE (POD)
+    │   │   ├── Exa
+    │   │   ├── Jupiter
+    │   │   ├── Justice League
+    │   │   ├── Neptune
+    │   │   ├── Peta
+    │   │   ├── Saturn
+    │   │   ├── Utopia
+    │   │   └── Support
+    │   └── Data In Use (POD)
+    │       ├── Giga
+    │       ├── Kilo
+    │       ├── Peta
+    │       └── Tera
+    ├── Core Data Engineering
+    ├── Health Monitoring
+    └── SpaceBots
+```
+
+### Teams by POD
+
+#### Data Acquisition and Preparation
+| Team | Area Path |
+|------|-----------|
+| Alpha | `Audit Cortex 2\Omnia Data\Omnia Data Management\Data Acquisition and Preparation\Alpha` |
+| Beta | `Audit Cortex 2\Omnia Data\Omnia Data Management\Data Acquisition and Preparation\Beta` |
+| Megatron | `Audit Cortex 2\Omnia Data\Omnia Data Management\Data Acquisition and Preparation\Megatron` |
+| Support | `Audit Cortex 2\Omnia Data\Omnia Data Management\Data Acquisition and Preparation\Support` |
+
+#### Data Management and Activation
+| Team | Area Path |
+|------|-----------|
+| Delta | `Audit Cortex 2\Omnia Data\Omnia Data Management\Data Management and Activation\Delta` |
+| Gamma | `Audit Cortex 2\Omnia Data\Omnia Data Management\Data Management and Activation\Gamma` |
+| Skyrockets | `Audit Cortex 2\Omnia Data\Omnia Data Management\Data Management and Activation\Skyrockets` |
+
+#### Omnia JE
+| Team | Area Path |
+|------|-----------|
+| Exa | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Omnia JE\Exa` |
+| Jupiter | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Omnia JE\Jupiter` |
+| Justice League | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Omnia JE\Justice League` |
+| Neptune | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Omnia JE\Neptune` |
+| Peta | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Omnia JE\Peta` |
+| Saturn | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Omnia JE\Saturn` |
+| Utopia | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Omnia JE\Utopia` |
+| Support | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Omnia JE\Support` |
+
+#### Data In Use
+| Team | Area Path |
+|------|-----------|
+| Giga | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Data In Use\Giga` |
+| Kilo | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Data In Use\Kilo` |
+| Peta | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Data In Use\Peta` |
+| Tera | `Audit Cortex 2\Omnia Data\Omnia Data Automation\Data In Use\Tera` |
+
+#### Other Teams
+| Team | Area Path |
+|------|-----------|
+| Galileo | `Audit Cortex 2\Omnia Data\Omnia Data Acquisition\Galileo` |
+| Core Data Engineering | `Audit Cortex 2\Omnia Data\Core Data Engineering` |
+| Health Monitoring | `Audit Cortex 2\Omnia Data\Health Monitoring` |
+| SpaceBots | `Audit Cortex 2\Omnia Data\SpaceBots` |
