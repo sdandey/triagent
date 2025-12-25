@@ -25,6 +25,12 @@ def help_command(console: Console) -> None:
         ("/config set <key> <value>", "Set a config value"),
         ("/team", "Show current team"),
         ("/team <name>", "Switch team (levvia/omnia/omnia-data)"),
+        ("/team-report <team>", "Generate team iteration status report"),
+        ("/team-report <team> --save", "Generate and save report to docs/"),
+        ("/confirm", "Show write confirmation status"),
+        ("/confirm on", "Enable confirmations for ADO/Git writes"),
+        ("/confirm off", "Disable confirmations (auto-approve)"),
+        ("/versions", "Show installed and pinned tool versions"),
         ("/clear", "Clear conversation history"),
         ("/exit, /quit", "Exit Triagent"),
     ]

@@ -8,6 +8,11 @@ from rich.table import Table
 
 from triagent.config import ConfigManager
 
+# Config key aliases for user convenience
+CONFIG_ALIASES = {
+    "markdown": "markdown_format",
+}
+
 
 def config_command(
     console: Console,
@@ -69,6 +74,9 @@ def _set_config(
 ) -> None:
     """Set a config value."""
     config = config_manager.load_config()
+
+    # Resolve alias to actual key name
+    key = CONFIG_ALIASES.get(key, key)
 
     if not hasattr(config, key):
         console.print(f"[red]Error:[/red] Unknown config key '{key}'")

@@ -2,6 +2,10 @@
 
 Provides a single flexible tool that can execute any Azure CLI command,
 with automatic consent for read operations and confirmation for write operations.
+
+Supports both:
+- Legacy format (AZURE_CLI_TOOL dict) for custom client implementations
+- SDK format (@tool decorator) for Claude Agent SDK
 """
 
 from __future__ import annotations
@@ -11,7 +15,9 @@ import subprocess
 from collections.abc import Callable
 from typing import Any
 
-# Tool definition for OpenAI function calling format
+from claude_agent_sdk import tool
+
+# Tool definition for OpenAI/Anthropic function calling format (legacy)
 AZURE_CLI_TOOL = {
     "name": "execute_azure_cli",
     "description": """Execute an Azure CLI command to interact with Azure DevOps.
@@ -169,3 +175,88 @@ def execute_azure_cli(
         return {"success": False, "output": "", "error": "Azure CLI (az) not found. Please install it first."}
     except Exception as e:
         return {"success": False, "output": "", "error": str(e)}
+
+
+# SDK-compatible tool using @tool decorator
+@tool(
+    name="execute_azure_cli",
+    description="""Execute an Azure CLI command to interact with Azure DevOps.
+
+IMPORTANT: Always use --top AND --query to limit results and avoid large responses.
+
+Common commands:
+- az repos list --org URL --project NAME --top 10 --output json
+- az repos pr list --org URL --project NAME --top 15 --query "[].{id:pullRequestId,title:title}" --output json
+- az boards work-item show --id ID --org URL --output json
+- az pipelines runs list --pipeline-id ID --org URL --project NAME --top 10 --output json
+
+Only 'az' commands are allowed for security.""",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": "The full Azure CLI command starting with 'az'",
+            }
+        },
+        "required": ["command"],
+    },
+)
+async def execute_azure_cli_sdk(args: dict[str, Any]) -> dict[str, Any]:
+    """SDK-compatible Azure CLI tool execution.
+
+    Args:
+        args: Dictionary containing 'command' key with the az command
+
+    Returns:
+        SDK-format response with content array
+    """
+    command = args.get("command", "").strip()
+
+    # Security: only allow az commands
+    if not command.startswith("az "):
+        return {
+            "content": [{"type": "text", "text": "Error: Only 'az' commands are allowed"}],
+            "is_error": True,
+        }
+
+    try:
+        # Parse and execute the command
+        cmd_args = shlex.split(command)
+        result = subprocess.run(
+            cmd_args,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        if result.returncode == 0:
+            return {
+                "content": [{"type": "text", "text": result.stdout}],
+            }
+        else:
+            return {
+                "content": [{"type": "text", "text": f"Error: {result.stderr}"}],
+                "is_error": True,
+            }
+
+    except subprocess.TimeoutExpired:
+        return {
+            "content": [{"type": "text", "text": "Error: Command timed out after 60 seconds"}],
+            "is_error": True,
+        }
+    except ValueError as e:
+        return {
+            "content": [{"type": "text", "text": f"Error: Invalid command format: {e}"}],
+            "is_error": True,
+        }
+    except FileNotFoundError:
+        return {
+            "content": [{"type": "text", "text": "Error: Azure CLI (az) not found. Please install it."}],
+            "is_error": True,
+        }
+    except Exception as e:
+        return {
+            "content": [{"type": "text", "text": f"Error: {e}"}],
+            "is_error": True,
+        }

@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Main test container with Azure credentials mounted
+  triagent-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount Azure credentials for real auth testing
+      - ~/.azure:/home/tester/.azure:ro
+      # Mount source for live development
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HOME=/home/tester
+    stdin_open: true
+    tty: true
+
+  # Clean container without any mounted credentials (fresh install test)
+  triagent-test-clean:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HOME=/home/tester
+    # No volume mounts - completely fresh environment
+    stdin_open: true
+    tty: true
+
+  # Unit tests runner
+  triagent-unit-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: pytest tests/unit/ -v
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  # Integration tests runner (requires Azure auth)
+  triagent-integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ~/.azure:/home/tester/.azure:ro
+    command: pytest tests/integration/ -v
+    environment:
+      - PYTHONUNBUFFERED=1

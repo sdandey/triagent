@@ -24,9 +24,14 @@ class TriagentConfig:
     azure_cli_authenticated: bool = False
     ado_organization: str = "symphonyvsts"
     ado_project: str = "Audit Cortex 2"
-    default_repository: str = ""
-    kusto_cluster: str = ""
     verbose: bool = False
+    # SSL settings for corporate environments
+    disable_ssl_verify: bool = True  # Default ON for corporate proxies
+    ssl_cert_file: str | None = None  # Path to CA bundle for NODE_EXTRA_CA_CERTS
+    # Write confirmation settings
+    auto_approve_writes: bool = False  # If True, skip write operation confirmations
+    # Output formatting
+    markdown_format: bool = False  # If True, render markdown (buffers); False streams plain text
 
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
@@ -35,9 +40,11 @@ class TriagentConfig:
             "azure_cli_authenticated": self.azure_cli_authenticated,
             "ado_organization": self.ado_organization,
             "ado_project": self.ado_project,
-            "default_repository": self.default_repository,
-            "kusto_cluster": self.kusto_cluster,
             "verbose": self.verbose,
+            "disable_ssl_verify": self.disable_ssl_verify,
+            "ssl_cert_file": self.ssl_cert_file,
+            "auto_approve_writes": self.auto_approve_writes,
+            "markdown_format": self.markdown_format,
         }
 
     @classmethod
@@ -48,9 +55,11 @@ class TriagentConfig:
             azure_cli_authenticated=data.get("azure_cli_authenticated", False),
             ado_organization=data.get("ado_organization", "symphonyvsts"),
             ado_project=data.get("ado_project", "Audit Cortex 2"),
-            default_repository=data.get("default_repository", ""),
-            kusto_cluster=data.get("kusto_cluster", ""),
             verbose=data.get("verbose", False),
+            disable_ssl_verify=data.get("disable_ssl_verify", True),
+            ssl_cert_file=data.get("ssl_cert_file"),
+            auto_approve_writes=data.get("auto_approve_writes", False),
+            markdown_format=data.get("markdown_format", False),
         )
 
 
@@ -69,6 +78,8 @@ class TriagentCredentials:
     # Azure Foundry credentials
     anthropic_foundry_api_key: str = ""
     anthropic_foundry_resource: str = ""
+    anthropic_foundry_base_url: str = ""
+    anthropic_foundry_model: str = "claude-opus-4-5"
 
     # ADO credentials
     ado_pat: str = ""
@@ -82,6 +93,8 @@ class TriagentCredentials:
             "databricks_model": self.databricks_model,
             "anthropic_foundry_api_key": self.anthropic_foundry_api_key,
             "anthropic_foundry_resource": self.anthropic_foundry_resource,
+            "anthropic_foundry_base_url": self.anthropic_foundry_base_url,
+            "anthropic_foundry_model": self.anthropic_foundry_model,
             "ado_pat": self.ado_pat,
         }
 
@@ -98,6 +111,8 @@ class TriagentCredentials:
             databricks_model=data.get("databricks_model", "databricks-claude-sonnet-4-5"),
             anthropic_foundry_api_key=data.get("anthropic_foundry_api_key", ""),
             anthropic_foundry_resource=data.get("anthropic_foundry_resource", ""),
+            anthropic_foundry_base_url=data.get("anthropic_foundry_base_url", ""),
+            anthropic_foundry_model=data.get("anthropic_foundry_model", "claude-opus-4-5"),
             ado_pat=data.get("ado_pat", ""),
         )
 

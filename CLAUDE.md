@@ -8,7 +8,15 @@ Triagent is a Claude-powered CLI for Azure DevOps automation. It provides an int
 
 ## Build and Development Commands
 
+**IMPORTANT**: Always activate the virtual environment before running any commands.
+
 ```bash
+# Activate virtual environment (ALWAYS do this first)
+source .venv/bin/activate
+
+# Sync dependencies (using uv)
+uv sync
+
 # Install with development dependencies (using uv)
 uv pip install -e ".[dev]"
 
@@ -74,3 +82,56 @@ Tests use pytest with pytest-asyncio. Test files mirror source structure:
 - `tests/test_teams.py`: Team configuration lookups
 
 Configuration tests use `TemporaryDirectory` for isolated file system operations.
+
+## Azure DevOps Repositories (Audit Cortex 2)
+
+### Organization Details
+- **Organization**: symphonyvsts
+- **Project**: Audit Cortex 2
+- **Git SSH Base**: `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/`
+- **Local Clone Path**: `~/code/{repo-name}`
+
+### Active Repositories (Monitored Services)
+
+These repositories have active application logs and are prioritized for exception investigation:
+
+| Repository | Branch | AppRoleName | SSH Clone URL |
+|------------|--------|-------------|---------------|
+| data-exchange-service | master | DataExchangeGateway | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/data-exchange-service` |
+| cortex-datamanagement-services | master | AppSupportService, DataPreparationService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/cortex-datamanagement-services` |
+| engagement-service | master | EngagementService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/engagement-service` |
+| security-service | master | SecurityService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/security-service` |
+| data-kitchen-service | master | DataKitchenService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/data-kitchen-service` |
+| analytic-template-service | master | AnalyticTemplateService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/analytic-template-service` |
+| notification-service | master | NotificationService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/notification-service` |
+| staging-service | master | StagingService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/staging-service` |
+| spark-job-management | master | SparkJobManagementService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/spark-job-management` |
+| cortex-ui | master | Cortex-UI | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/cortex-ui` |
+| client-service | master | ClientService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/client-service` |
+| workpaper-service | master | WorkpaperService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/workpaper-service` |
+| async-workflow-framework | master | async-workflow-function | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/async-workflow-framework` |
+| sampling-service | master | SamplingService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/sampling-service` |
+| localization-service | master | LocalizationService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/localization-service` |
+| scheduler-service | master | SchedulerService | `git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/scheduler-service` |
+
+### Git Commands for Investigation
+
+#### Clone a repository
+```bash
+git clone git@ssh.dev.azure.com:v3/symphonyvsts/Audit%20Cortex%202/{repo-name} ~/code/{repo-name}
+```
+
+#### Update existing repository
+```bash
+cd ~/code/{repo-name}
+git fetch origin
+git checkout master
+git pull origin master
+```
+
+#### Checkout release branch
+```bash
+git fetch --all
+git checkout release-{version}
+git pull origin release-{version}
+```
