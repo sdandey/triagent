@@ -17,6 +17,19 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from triagent import __version__
+from triagent.commands.config import config_command
+from triagent.commands.help import help_command
+from triagent.commands.init import init_command
+from triagent.commands.team import team_command
+from triagent.commands.team_report import team_report_command
+from triagent.config import ConfigManager, get_config_manager
+from triagent.sdk_client import create_sdk_client
+from triagent.teams.config import get_team_config
+from triagent.versions import (
+    AZURE_EXTENSION_VERSIONS,
+    CLAUDE_CODE_VERSION,
+    MCP_AZURE_DEVOPS_VERSION,
+)
 
 # Classic braille spinner (rotates like a wheel)
 BRAILLE_SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -153,20 +166,6 @@ class ActivityTracker:
             self.console.print(md)
         self._text_buffer = ""
 
-
-from triagent.commands.config import config_command
-from triagent.commands.help import help_command
-from triagent.commands.init import init_command
-from triagent.commands.team import team_command
-from triagent.commands.team_report import team_report_command
-from triagent.config import ConfigManager, get_config_manager
-from triagent.sdk_client import create_sdk_client
-from triagent.teams.config import get_team_config
-from triagent.versions import (
-    AZURE_EXTENSION_VERSIONS,
-    CLAUDE_CODE_VERSION,
-    MCP_AZURE_DEVOPS_VERSION,
-)
 
 app = typer.Typer(
     name="triagent",
@@ -665,13 +664,17 @@ def interactive_loop_legacy(
                 markdown_enabled=config.markdown_format,
             )
 
-            # Define callbacks that use the tracker
-            def on_tool_start(tool_name: str, command: str) -> None:
+            # Define callbacks that use the tracker (bind tracker to avoid B023)
+            def on_tool_start(
+                tool_name: str, command: str, _tracker: ActivityTracker = tracker
+            ) -> None:
                 tool_input = {"command": command} if command else None
-                tracker.tool_starting(tool_name, tool_input)
+                _tracker.tool_starting(tool_name, tool_input)
 
-            def on_tool_end(tool_name: str, success: bool) -> None:
-                tracker.tool_completed(tool_name, success)
+            def on_tool_end(
+                tool_name: str, success: bool, _tracker: ActivityTracker = tracker
+            ) -> None:
+                _tracker.tool_completed(tool_name, success)
 
             try:
                 # Use send_message_with_tools for Azure CLI execution

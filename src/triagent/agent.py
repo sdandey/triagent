@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import anthropic
 import httpx
@@ -15,6 +15,9 @@ from anthropic.types import Message, TextBlock
 
 from triagent.config import ConfigManager, TriagentCredentials
 from triagent.prompts.system import get_system_prompt
+
+if TYPE_CHECKING:
+    from triagent.tools.error_recovery import ErrorContext
 
 
 def _get_databricks_token(host: str) -> str | None:
@@ -104,7 +107,7 @@ class AzureFoundryClient:
         system: str | None = None,
         max_tokens: int = 4096,
         tools: list[dict] | None = None,
-    ) -> tuple[dict | None, "ErrorContext | None"]:
+    ) -> tuple[dict | None, ErrorContext | None]:
         """Send a message and return detailed error info if failed.
 
         Args:
@@ -288,7 +291,7 @@ class DatabricksClient:
         system: str | None = None,
         max_tokens: int = 4096,
         tools: list[dict] | None = None,
-    ) -> tuple[dict | None, "ErrorContext | None"]:
+    ) -> tuple[dict | None, ErrorContext | None]:
         """Send a message and return detailed error info if failed.
 
         Args:
