@@ -151,15 +151,41 @@ def install_nodejs() -> tuple[bool, str]:
     return False, f"Unsupported OS: {system}"
 
 
+def _find_az_command() -> str | None:
+    """Find the az command path.
+
+    Checks both system PATH and common pip install locations (~/.local/bin).
+
+    Returns:
+        Path to az command or None if not found
+    """
+    # Try system PATH first
+    if shutil.which("az"):
+        return "az"
+
+    # Check common pip install locations
+    local_az = Path.home() / ".local" / "bin" / "az"
+    if local_az.exists():
+        return str(local_az)
+
+    return None
+
+
 def check_azure_cli_installed() -> tuple[bool, str]:
     """Check if Azure CLI is installed.
+
+    Checks both system PATH and common pip install locations (~/.local/bin).
 
     Returns:
         Tuple of (is_installed, version_string)
     """
+    az_cmd = _find_az_command()
+    if not az_cmd:
+        return False, ""
+
     try:
         result = subprocess.run(
-            ["az", "--version"],
+            [az_cmd, "--version"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -175,9 +201,13 @@ def check_azure_cli_installed() -> tuple[bool, str]:
 
 def check_azure_devops_extension() -> bool:
     """Check if Azure DevOps CLI extension is installed."""
+    az_cmd = _find_az_command()
+    if not az_cmd:
+        return False
+
     try:
         result = subprocess.run(
-            ["az", "extension", "show", "--name", "azure-devops"],
+            [az_cmd, "extension", "show", "--name", "azure-devops"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -193,9 +223,13 @@ def install_azure_devops_extension() -> bool:
     Returns:
         True if installation succeeded
     """
+    az_cmd = _find_az_command()
+    if not az_cmd:
+        return False
+
     try:
         result = subprocess.run(
-            ["az", "extension", "add", "--name", "azure-devops", "-y"],
+            [az_cmd, "extension", "add", "--name", "azure-devops", "-y"],
             capture_output=True,
             text=True,
             timeout=60,
@@ -214,9 +248,13 @@ def check_azure_extension(name: str) -> bool:
     Returns:
         True if extension is installed
     """
+    az_cmd = _find_az_command()
+    if not az_cmd:
+        return False
+
     try:
         result = subprocess.run(
-            ["az", "extension", "show", "--name", name],
+            [az_cmd, "extension", "show", "--name", name],
             capture_output=True,
             text=True,
             timeout=10,
@@ -227,7 +265,7 @@ def check_azure_extension(name: str) -> bool:
 
 
 def install_azure_extension(name: str, version: str | None = None) -> bool:
-    """Install an Azure CLI extension with optional version pinning.
+    """Install an Azure CLI extension with optional version pinning and pip fallback.
 
     Args:
         name: Extension name to install
@@ -236,34 +274,77 @@ def install_azure_extension(name: str, version: str | None = None) -> bool:
     Returns:
         True if installation succeeded
     """
+    import sys
+
     from triagent.versions import AZURE_EXTENSION_VERSIONS
 
     # Use pinned version if not specified
     version = version or AZURE_EXTENSION_VERSIONS.get(name)
 
-    cmd = ["az", "extension", "add", "--name", name, "-y"]
-    if version:
-        cmd.extend(["--version", version])
+    # Find az command (supports pip-installed CLI in ~/.local/bin)
+    az_cmd = _find_az_command()
 
+    if az_cmd:
+        cmd = [az_cmd, "extension", "add", "--name", name, "-y"]
+        if version:
+            cmd.extend(["--version", version])
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                return True
+        except subprocess.TimeoutExpired:
+            pass  # Fall through to pip
+
+    # Fallback: Try pip install for extension
+    # Azure CLI extensions are available as pip packages
+    pip_package = f"azure-cli-{name}"
     try:
-        result = subprocess.run(
-            cmd,
+        pip_result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", pip_package],
             capture_output=True,
             text=True,
             timeout=120,
         )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return pip_result.returncode == 0
+    except subprocess.TimeoutExpired:
         return False
 
 
+def _install_azure_cli_pip() -> tuple[bool, str]:
+    """Fallback: Install Azure CLI via pip (no sudo required).
+
+    Returns:
+        Tuple of (success, message)
+    """
+    import sys
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "azure-cli"],
+            capture_output=True,
+            text=True,
+            timeout=600,  # 10 minutes for large package
+        )
+        if result.returncode == 0:
+            return True, "Installed via pip"
+        return False, f"pip install failed: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return False, "pip install timed out"
+
+
 def install_azure_cli() -> tuple[bool, str]:
-    """Auto-install Azure CLI based on detected OS.
+    """Auto-install Azure CLI based on detected OS with pip fallback.
 
     Supports:
-    - macOS: Homebrew
-    - Windows: winget or MSI installer
-    - Linux: apt (Debian/Ubuntu)
+    - macOS: Homebrew, then pip fallback
+    - Windows: winget or MSI installer, then pip fallback
+    - Linux: apt (Debian/Ubuntu), then pip fallback
 
     Returns:
         Tuple of (success, message)
@@ -287,10 +368,11 @@ def install_azure_cli() -> tuple[bool, str]:
                 )
                 if result.returncode == 0:
                     return True, "Installed via Homebrew"
-                return False, f"Homebrew install failed: {result.stderr}"
             except subprocess.TimeoutExpired:
-                return False, "Installation timed out"
-        return False, "Homebrew not found. Install from: https://brew.sh"
+                pass  # Fall through to pip
+
+        # Fallback to pip
+        return _install_azure_cli_pip()
 
     elif system == "windows":
         # Try winget first
@@ -307,7 +389,7 @@ def install_azure_cli() -> tuple[bool, str]:
             except subprocess.TimeoutExpired:
                 pass  # Fall through to MSI
 
-        # Fall back to PowerShell MSI installer
+        # Try PowerShell MSI installer
         ps_script = (
             "Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows "
             "-OutFile $env:TEMP\\AzureCLI.msi; "
@@ -324,26 +406,32 @@ def install_azure_cli() -> tuple[bool, str]:
             )
             if result.returncode == 0:
                 return True, "Installed via MSI"
-            return False, f"MSI installation failed: {result.stderr}"
         except subprocess.TimeoutExpired:
-            return False, "Installation timed out"
+            pass  # Fall through to pip
+
+        # Fallback to pip
+        return _install_azure_cli_pip()
 
     elif system == "linux":
-        # Debian/Ubuntu installation
-        try:
-            result = subprocess.run(
-                ["bash", "-c", "curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash"],
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-            if result.returncode == 0:
-                return True, "Installed via apt"
-            return False, f"Installation failed: {result.stderr}"
-        except subprocess.TimeoutExpired:
-            return False, "Installation timed out"
+        # Try Debian/Ubuntu installation first
+        if shutil.which("curl") and shutil.which("sudo"):
+            try:
+                result = subprocess.run(
+                    ["bash", "-c", "curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                if result.returncode == 0:
+                    return True, "Installed via apt"
+            except subprocess.TimeoutExpired:
+                pass  # Fall through to pip
 
-    return False, f"Unsupported OS: {system}"
+        # Fallback to pip (works without sudo/curl)
+        return _install_azure_cli_pip()
+
+    # Unknown OS - try pip as last resort
+    return _install_azure_cli_pip()
 
 
 def run_azure_login() -> bool:
