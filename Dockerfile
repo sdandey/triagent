@@ -36,8 +36,12 @@ RUN useradd -m -u 1000 tester && \
     chown -R tester:tester /app
 USER tester
 
-# Create triagent config directory
-RUN mkdir -p /home/tester/.triagent
+# Set npm global directory for non-root user (critical for detection after install)
+ENV NPM_CONFIG_PREFIX=/home/tester/.npm-global
+ENV PATH=$PATH:/home/tester/.npm-global/bin
+
+# Create triagent config directory and npm global directory
+RUN mkdir -p /home/tester/.triagent /home/tester/.npm-global
 
 # Default command
 CMD ["bash"]

@@ -226,18 +226,28 @@ def check_azure_extension(name: str) -> bool:
         return False
 
 
-def install_azure_extension(name: str) -> bool:
-    """Install an Azure CLI extension.
+def install_azure_extension(name: str, version: str | None = None) -> bool:
+    """Install an Azure CLI extension with optional version pinning.
 
     Args:
         name: Extension name to install
+        version: Specific version to install (uses pinned version if None)
 
     Returns:
         True if installation succeeded
     """
+    from triagent.versions import AZURE_EXTENSION_VERSIONS
+
+    # Use pinned version if not specified
+    version = version or AZURE_EXTENSION_VERSIONS.get(name)
+
+    cmd = ["az", "extension", "add", "--name", name, "-y"]
+    if version:
+        cmd.extend(["--version", version])
+
     try:
         result = subprocess.run(
-            ["az", "extension", "add", "--name", name, "-y"],
+            cmd,
             capture_output=True,
             text=True,
             timeout=120,
@@ -484,12 +494,59 @@ def get_databricks_token() -> str | None:
 
 
 def check_claude_code_installed() -> tuple[bool, str]:
-    """Check if claude-code CLI is installed.
+    """Check if claude-code CLI is installed using npm root (cross-platform).
+
+    This method is reliable across all platforms because it:
+    1. Uses npm's own configuration to find global modules
+    2. Doesn't rely on PATH or shell hash cache
+    3. Works on Windows, macOS, Linux, and Docker
 
     Returns:
         Tuple of (is_installed, version_string)
     """
-    # Try the global 'claude' command first
+    import json
+    import re
+
+    # Method 1: Check npm global modules directory (most reliable)
+    try:
+        result = subprocess.run(
+            ["npm", "root", "-g"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            npm_root = result.stdout.strip()
+            package_dir = Path(npm_root) / "@anthropic-ai" / "claude-code"
+            package_json = package_dir / "package.json"
+
+            if package_json.exists():
+                # Read version from package.json
+                with open(package_json) as f:
+                    pkg = json.load(f)
+                    version = pkg.get("version", "unknown")
+                    return True, version
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        pass
+
+    # Method 2: Fallback - try npm list (slower but also reliable)
+    try:
+        result = subprocess.run(
+            ["npm", "list", "-g", "@anthropic-ai/claude-code", "--depth=0"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode == 0 and "@anthropic-ai/claude-code" in result.stdout:
+            # Parse version from output like "@anthropic-ai/claude-code@2.0.76"
+            match = re.search(r"@anthropic-ai/claude-code@([\d.]+)", result.stdout)
+            if match:
+                return True, match.group(1)
+            return True, "installed"
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # Method 3: Last resort - try command directly (may fail due to hash cache)
     try:
         result = subprocess.run(
             ["claude", "--version"],
@@ -503,29 +560,17 @@ def check_claude_code_installed() -> tuple[bool, str]:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
-    # Try via npx (slower but works if not globally installed)
-    try:
-        result = subprocess.run(
-            ["npx", "@anthropic-ai/claude-code", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0:
-            version = result.stdout.strip() or result.stderr.strip()
-            return True, f"(via npx) {version}"
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-
     return False, ""
 
 
 def install_claude_code() -> tuple[bool, str]:
-    """Install claude-code CLI globally via npm.
+    """Install claude-code CLI globally via npm with pinned version.
 
     Returns:
         Tuple of (success, message)
     """
+    from triagent.versions import CLAUDE_CODE_VERSION
+
     # Check if npm is available
     if not check_npm_installed():
         return False, "npm/Node.js not installed. Install from: https://nodejs.org"
@@ -535,10 +580,11 @@ def install_claude_code() -> tuple[bool, str]:
     if installed:
         return True, f"Already installed: {version}"
 
-    # Install globally
+    # Install globally with pinned version
+    package = f"@anthropic-ai/claude-code@{CLAUDE_CODE_VERSION}"
     try:
         result = subprocess.run(
-            ["npm", "install", "-g", "@anthropic-ai/claude-code"],
+            ["npm", "install", "-g", package],
             capture_output=True,
             text=True,
             timeout=300,  # 5 minute timeout for npm install
@@ -548,7 +594,7 @@ def install_claude_code() -> tuple[bool, str]:
             installed, version = check_claude_code_installed()
             if installed:
                 return True, f"Installed: {version}"
-            return True, "Installed (restart terminal to use 'claude' command)"
+            return True, f"Installed v{CLAUDE_CODE_VERSION} (restart terminal to use 'claude' command)"
         return False, f"Installation failed: {result.stderr}"
     except subprocess.TimeoutExpired:
         return False, "Installation timed out"

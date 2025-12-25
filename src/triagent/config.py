@@ -28,6 +28,10 @@ class TriagentConfig:
     # SSL settings for corporate environments
     disable_ssl_verify: bool = True  # Default ON for corporate proxies
     ssl_cert_file: str | None = None  # Path to CA bundle for NODE_EXTRA_CA_CERTS
+    # Write confirmation settings
+    auto_approve_writes: bool = False  # If True, skip write operation confirmations
+    # Output formatting
+    markdown_format: bool = False  # If True, render markdown (buffers); False streams plain text
 
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
@@ -39,6 +43,8 @@ class TriagentConfig:
             "verbose": self.verbose,
             "disable_ssl_verify": self.disable_ssl_verify,
             "ssl_cert_file": self.ssl_cert_file,
+            "auto_approve_writes": self.auto_approve_writes,
+            "markdown_format": self.markdown_format,
         }
 
     @classmethod
@@ -52,6 +58,8 @@ class TriagentConfig:
             verbose=data.get("verbose", False),
             disable_ssl_verify=data.get("disable_ssl_verify", True),
             ssl_cert_file=data.get("ssl_cert_file"),
+            auto_approve_writes=data.get("auto_approve_writes", False),
+            markdown_format=data.get("markdown_format", False),
         )
 
 

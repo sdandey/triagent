@@ -13,58 +13,50 @@ import typer
 from claude_agent_sdk import ClaudeSDKClient, CLINotFoundError, ProcessError
 from rich.console import Console
 from rich.live import Live
+from rich.markdown import Markdown
 from rich.panel import Panel
 
 from triagent import __version__
 
-# Claude Code spinner characters
-CLAUDE_SPINNER = ["·", "✻", "✽", "✶", "✳", "✢"]
+# Classic braille spinner (rotates like a wheel)
+BRAILLE_SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 # Whimsical status messages (Claude Code style)
 THINKING_MESSAGES = ["Thinking", "Mulling", "Pondering", "Contemplating"]
 TOOL_MESSAGES = ["Executing", "Running", "Processing"]
 
-# Pulsing animation color sequences (creates breathing/fading effect)
-CYAN_PULSE = ["cyan", "bright_cyan", "white", "bright_cyan"]
-YELLOW_PULSE = ["yellow", "bright_yellow", "white", "bright_yellow"]
 
+class SpinnerStatus:
+    """Animated spinner status indicator using Rich's renderable protocol."""
 
-class PulsingStatus:
-    """Animated pulsing status indicator using Rich's renderable protocol."""
-
-    def __init__(
-        self,
-        message: str,
-        colors: list[str],
-        spinner_chars: list[str] | None = None,
-    ):
+    def __init__(self, message: str, color: str = "yellow"):
         self.message = message
-        self.colors = colors
-        self.spinner_chars = spinner_chars or CLAUDE_SPINNER
+        self.color = color
         self._idx = 0
 
     def __rich__(self) -> str:
-        """Render with current pulse color (called on each Live refresh)."""
-        color = self.colors[self._idx % len(self.colors)]
-        spinner = self.spinner_chars[self._idx % len(self.spinner_chars)]
+        """Render with rotating spinner character."""
+        spinner = BRAILLE_SPINNER[self._idx % len(BRAILLE_SPINNER)]
         self._idx += 1
-        return f"[{color}]{spinner} {self.message}...[/{color}]"
+        return f"[{self.color}]{spinner} {self.message}...[/{self.color}]"
 
 
 @dataclass
 class ActivityTracker:
-    """Tracks tool execution activity with Claude Code style spinner."""
+    """Tracks tool execution activity with Claude Code style spinner and optional markdown."""
 
     console: Console
     verbose: bool = False
+    markdown_enabled: bool = False  # If True, buffer for markdown; False streams plain text
     _live: Live | None = field(default=None, repr=False)
     _spinner_idx: int = field(default=0, repr=False)
     _tool_start_time: float = field(default=0.0, repr=False)
     _current_tool: str = field(default="", repr=False)
+    _text_buffer: str = field(default="", repr=False)
 
     def _get_spinner_char(self) -> str:
         """Get next spinner character."""
-        char = CLAUDE_SPINNER[self._spinner_idx % len(CLAUDE_SPINNER)]
+        char = BRAILLE_SPINNER[self._spinner_idx % len(BRAILLE_SPINNER)]
         self._spinner_idx += 1
         return char
 
@@ -85,13 +77,13 @@ class ActivityTracker:
                 input_str += "..."
             self.console.print(f"[dim]  Input: {input_str}[/dim]")
 
-        # Start pulsing animated spinner
+        # Start rotating spinner
         message = random.choice(TOOL_MESSAGES)
-        status = PulsingStatus(message, CYAN_PULSE)
+        status = SpinnerStatus(message, color="cyan")
         self._live = Live(
             status,
             console=self.console,
-            refresh_per_second=8,  # Faster refresh for smooth pulse
+            refresh_per_second=10,  # 10Hz for smooth spinner rotation
             transient=True,
         )
         self._live.start()
@@ -118,13 +110,13 @@ class ActivityTracker:
         if self._live:
             self._live.stop()
 
-        # Start pulsing animated thinking indicator
+        # Start rotating spinner for thinking
         message = random.choice(THINKING_MESSAGES)
-        status = PulsingStatus(message, YELLOW_PULSE)
+        status = SpinnerStatus(message, color="yellow")
         self._live = Live(
             status,
             console=self.console,
-            refresh_per_second=8,  # Faster refresh for smooth pulse
+            refresh_per_second=10,  # 10Hz for smooth spinner rotation
             transient=True,
         )
         self._live.start()
@@ -135,14 +127,46 @@ class ActivityTracker:
             self._live.stop()
             self._live = None
 
+    def buffer_text(self, text: str) -> None:
+        """Buffer text for markdown or stream plain text immediately."""
+        if self.markdown_enabled:
+            # Buffer for markdown rendering
+            self._text_buffer += text
+            self._flush_paragraphs()
+        else:
+            # Stream plain text immediately
+            self.console.print(text, end="")
+
+    def _flush_paragraphs(self) -> None:
+        """Render complete paragraphs as markdown."""
+        # Look for paragraph breaks (double newline)
+        while "\n\n" in self._text_buffer:
+            paragraph, self._text_buffer = self._text_buffer.split("\n\n", 1)
+            if paragraph.strip():
+                md = Markdown(paragraph)
+                self.console.print(md)
+
+    def flush_remaining(self) -> None:
+        """Flush any remaining buffered text as markdown."""
+        if self.markdown_enabled and self._text_buffer.strip():
+            md = Markdown(self._text_buffer)
+            self.console.print(md)
+        self._text_buffer = ""
+
 
 from triagent.commands.config import config_command
 from triagent.commands.help import help_command
 from triagent.commands.init import init_command
 from triagent.commands.team import team_command
+from triagent.commands.team_report import team_report_command
 from triagent.config import ConfigManager, get_config_manager
 from triagent.sdk_client import create_sdk_client
 from triagent.teams.config import get_team_config
+from triagent.versions import (
+    AZURE_EXTENSION_VERSIONS,
+    CLAUDE_CODE_VERSION,
+    MCP_AZURE_DEVOPS_VERSION,
+)
 
 app = typer.Typer(
     name="triagent",
@@ -158,6 +182,46 @@ def create_header(config_manager: ConfigManager) -> str:
     team_name = team_config.display_name if team_config else config.team
 
     return f"[bold cyan]Triagent CLI v{__version__}[/bold cyan] | Team: {team_name} | Project: {config.ado_project}"
+
+
+def versions_command(console: Console) -> None:
+    """Display installed and pinned tool versions."""
+    from triagent.mcp.setup import (
+        check_azure_cli_installed,
+        check_claude_code_installed,
+        check_nodejs_installed,
+    )
+
+    console.print()
+    console.print("[bold cyan]Triagent Tool Versions[/bold cyan]")
+    console.print()
+
+    # Triagent version
+    console.print(f"  [bold]Triagent CLI:[/bold]         v{__version__}")
+    console.print()
+
+    # Detected installed versions
+    console.print("[bold]Installed Tools:[/bold]")
+    az_installed, az_version = check_azure_cli_installed()
+    node_installed, node_version = check_nodejs_installed()
+    claude_installed, claude_version = check_claude_code_installed()
+
+    az_display = az_version if az_installed else "[red]Not installed[/red]"
+    node_display = node_version if node_installed else "[red]Not installed[/red]"
+    claude_display = claude_version if claude_installed else "[red]Not installed[/red]"
+
+    console.print(f"  Azure CLI:             {az_display}")
+    console.print(f"  Node.js:               {node_display}")
+    console.print(f"  Claude Code CLI:       {claude_display}")
+    console.print()
+
+    # Pinned versions (used by /init)
+    console.print("[bold]Pinned Versions (used by /init):[/bold]")
+    console.print(f"  Claude Code:           v{CLAUDE_CODE_VERSION}")
+    console.print(f"  MCP Azure DevOps:      v{MCP_AZURE_DEVOPS_VERSION}")
+    for ext_name, ext_version in AZURE_EXTENSION_VERSIONS.items():
+        console.print(f"  az ext {ext_name}:  v{ext_version}")
+    console.print()
 
 
 def parse_slash_command(user_input: str) -> tuple[str, list[str]]:
@@ -295,6 +359,38 @@ def handle_slash_command(
         console.print("[dim]Conversation cleared (new session on next message)[/dim]")
         return True
 
+    if command == "versions":
+        versions_command(console)
+        return True
+
+    if command == "team-report":
+        team_report_command(console, config_manager, args)
+        return True
+
+    if command == "confirm":
+        # Toggle write operation confirmations
+        config = config_manager.load_config()
+        arg = args[0].lower() if args else ""
+
+        if arg == "off":
+            config.auto_approve_writes = True
+            config_manager.save_config(config)
+            console.print("[green]✓ Write confirmations DISABLED[/green]")
+            console.print("[dim]  ADO/Git write operations will auto-approve[/dim]")
+        elif arg == "on":
+            config.auto_approve_writes = False
+            config_manager.save_config(config)
+            console.print("[green]✓ Write confirmations ENABLED[/green]")
+            console.print("[dim]  You'll be asked to confirm write operations[/dim]")
+        else:
+            status = "[red]OFF[/red] (auto-approve)" if config.auto_approve_writes else "[green]ON[/green] (confirm)"
+            console.print(f"[bold]Write confirmations:[/bold] {status}")
+            console.print()
+            console.print("[dim]Usage: /confirm on|off[/dim]")
+            console.print("[dim]  on  - Ask for confirmation before write operations[/dim]")
+            console.print("[dim]  off - Auto-approve write operations[/dim]")
+        return True
+
     # Unknown command
     console.print(f"[red]Unknown command: /{command}[/red]")
     console.print("[dim]Type /help for available commands[/dim]")
@@ -320,9 +416,10 @@ def process_sdk_message(
             block_type = type(block).__name__
 
             if block_type == "TextBlock":
-                # Stop any spinner before printing text
+                # Stop any spinner before buffering text
                 tracker.stop()
-                console.print(block.text, end="")
+                # Buffer text for markdown rendering
+                tracker.buffer_text(block.text)
 
             elif block_type == "ToolUseBlock":
                 # Start spinner for tool execution
@@ -404,7 +501,11 @@ async def interactive_loop_async(
 
     # Create activity tracker for visual feedback
     config = config_manager.load_config()
-    tracker = ActivityTracker(console=console, verbose=config.verbose)
+    tracker = ActivityTracker(
+        console=console,
+        verbose=config.verbose,
+        markdown_enabled=config.markdown_format,
+    )
 
     # Use SDK context manager for session lifecycle
     try:
@@ -456,9 +557,9 @@ async def interactive_loop_async(
                 async for msg in client.receive_response():
                     process_sdk_message(msg, console, tracker)
 
-                # Ensure spinner is stopped
+                # Ensure spinner is stopped and flush remaining markdown
                 tracker.stop()
-                console.print()
+                tracker.flush_remaining()
                 console.print()
 
     except CLINotFoundError:
@@ -558,7 +659,11 @@ def interactive_loop_legacy(
 
             # Create activity tracker for visual feedback
             config = config_manager.load_config()
-            tracker = ActivityTracker(console=console, verbose=config.verbose)
+            tracker = ActivityTracker(
+                console=console,
+                verbose=config.verbose,
+                markdown_enabled=config.markdown_format,
+            )
 
             # Define callbacks that use the tracker
             def on_tool_start(tool_name: str, command: str) -> None:
@@ -575,8 +680,10 @@ def interactive_loop_legacy(
                     on_tool_start=on_tool_start,
                     on_tool_end=on_tool_end,
                 ):
-                    tracker.stop()  # Stop spinner before printing text
-                    console.print(chunk, end="")
+                    tracker.stop()  # Stop spinner before buffering text
+                    tracker.buffer_text(chunk)
+                # Flush remaining markdown after streaming completes
+                tracker.flush_remaining()
             except Exception as e:
                 tracker.stop()
                 console.print(f"[red]Error: {e}[/red]")

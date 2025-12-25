@@ -21,6 +21,7 @@ from triagent.config import ConfigManager
 from triagent.hooks import get_triagent_hooks
 from triagent.mcp.tools import create_triagent_mcp_server
 from triagent.prompts.system import get_system_prompt
+from triagent.versions import MCP_AZURE_DEVOPS_VERSION
 
 
 @dataclass
@@ -70,13 +71,16 @@ class TriagentSDKClient:
         """
         config = self.config_manager.load_config()
 
+        # Pin MCP server version
+        mcp_package = f"@anthropic-ai/mcp-server-azure-devops@{MCP_AZURE_DEVOPS_VERSION}"
+
         return {
             # In-process triagent tools
             "triagent": create_triagent_mcp_server(),
-            # External Azure DevOps MCP server
+            # External Azure DevOps MCP server (pinned version)
             "azure-devops": {
                 "command": "npx",
-                "args": ["-y", "@anthropic-ai/mcp-server-azure-devops"],
+                "args": ["-y", mcp_package],
                 "env": {
                     "AZURE_DEVOPS_ORG": config.ado_organization,
                     "AZURE_DEVOPS_PROJECT": config.ado_project,
@@ -115,9 +119,17 @@ class TriagentSDKClient:
             ClaudeAgentOptions configured for triagent
         """
         config = self.config_manager.load_config()
+        credentials = self.config_manager.load_credentials()
 
         # Start with Foundry auth environment
         env = get_foundry_env(self.config_manager)
+
+        # Get the model based on provider
+        model = None
+        if credentials.api_provider == "azure_foundry":
+            model = credentials.anthropic_foundry_model
+        elif credentials.api_provider == "databricks":
+            model = credentials.databricks_model
 
         # Add SSL handling for corporate environments
         if config.disable_ssl_verify:
@@ -131,6 +143,7 @@ class TriagentSDKClient:
             permission_mode="bypassPermissions",
             cwd=str(self.working_dir) if self.working_dir else None,
             env=env,
+            model=model,
             hooks=get_triagent_hooks(config),
             mcp_servers=self._get_mcp_config(),
             allowed_tools=self._get_allowed_tools(),
