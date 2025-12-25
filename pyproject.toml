@@ -42,6 +42,7 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.4.0",
     "mypy>=1.10.0",
+    "python-semantic-release>=9.0.0",
 ]
 
 [project.urls]
@@ -86,3 +87,11 @@ warn_unused_ignores = true
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+commit_message = "chore(release): {version}"
+build_command = "pip install build && python -m build"
+upload_to_pypi = false
+tag_format = "v{version}"
