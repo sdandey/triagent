@@ -24,6 +24,32 @@ CLAUDE_SPINNER = ["·", "✻", "✽", "✶", "✳", "✢"]
 THINKING_MESSAGES = ["Thinking", "Mulling", "Pondering", "Contemplating"]
 TOOL_MESSAGES = ["Executing", "Running", "Processing"]
 
+# Pulsing animation color sequences (creates breathing/fading effect)
+CYAN_PULSE = ["cyan", "bright_cyan", "white", "bright_cyan"]
+YELLOW_PULSE = ["yellow", "bright_yellow", "white", "bright_yellow"]
+
+
+class PulsingStatus:
+    """Animated pulsing status indicator using Rich's renderable protocol."""
+
+    def __init__(
+        self,
+        message: str,
+        colors: list[str],
+        spinner_chars: list[str] | None = None,
+    ):
+        self.message = message
+        self.colors = colors
+        self.spinner_chars = spinner_chars or CLAUDE_SPINNER
+        self._idx = 0
+
+    def __rich__(self) -> str:
+        """Render with current pulse color (called on each Live refresh)."""
+        color = self.colors[self._idx % len(self.colors)]
+        spinner = self.spinner_chars[self._idx % len(self.spinner_chars)]
+        self._idx += 1
+        return f"[{color}]{spinner} {self.message}...[/{color}]"
+
 
 @dataclass
 class ActivityTracker:
@@ -59,12 +85,13 @@ class ActivityTracker:
                 input_str += "..."
             self.console.print(f"[dim]  Input: {input_str}[/dim]")
 
-        # Start Claude-style spinner
+        # Start pulsing animated spinner
         message = random.choice(TOOL_MESSAGES)
+        status = PulsingStatus(message, CYAN_PULSE)
         self._live = Live(
-            f"[cyan]{self._get_spinner_char()} {message}...[/cyan]",
+            status,
             console=self.console,
-            refresh_per_second=4,
+            refresh_per_second=8,  # Faster refresh for smooth pulse
             transient=True,
         )
         self._live.start()
@@ -91,11 +118,13 @@ class ActivityTracker:
         if self._live:
             self._live.stop()
 
+        # Start pulsing animated thinking indicator
         message = random.choice(THINKING_MESSAGES)
+        status = PulsingStatus(message, YELLOW_PULSE)
         self._live = Live(
-            f"[yellow]{self._get_spinner_char()} {message}...[/yellow]",
+            status,
             console=self.console,
-            refresh_per_second=4,
+            refresh_per_second=8,  # Faster refresh for smooth pulse
             transient=True,
         )
         self._live.start()
