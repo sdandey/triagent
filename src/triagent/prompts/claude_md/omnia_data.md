@@ -207,37 +207,78 @@ All Application Insights are backed by Log Analytics workspaces with LogAnalytic
 
 ### AME (Americas) Environments
 
-| Env | App Insights | Resource Group | Log Analytics Workspace | LAW Resource Group | Subscription |
-|-----|--------------|----------------|------------------------|-------------------|--------------|
-| DEV | APPIN_CORTEX_APPLICATION_GENERAL_DEV | App-Cortex-AME-DEV-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD |
-| DEV1 | APPIN_CORTEX_APPLICATION_GENERAL_DEV1 | App-Cortex-AME-DEV1-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD |
-| DEV2 | APPIN_CORTEX_APPLICATION_GENERAL_DEV2 | App-Cortex-PaaS-AME-DEV2-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD |
-| QAS | APPIN_CORTEX_APPLICATION_GENERAL_QAS | App-Cortex-AME-QAS-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD |
-| QAS1 | APPIN_CORTEX_APPLICATION_GENERAL_QAS1 | App-Cortex-AME-QAS1-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD |
-| QAS2 | APPIN_CORTEX_APPLICATION_GENERAL_QAS2 | App-Cortex-PaaS-AME-QAS2-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD |
-| LOD | APPIN_CORTEX_APPLICATION_GENERAL_LOD | App-Cortex-AME-LOD-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD |
-| STG | APPIN_CORTEX_APPLICATION_GENERAL_STG | App-Cortex-AME-STG-RG | prdamecortexlaw | app-cortex-ame-prd-shared-rg | US_AUDIT_PROD |
-| STG2 | APPIN_CORTEX_APPLICATION_GENERAL_STG2 | App-Cortex-PaaS-AME-STG2-RG | prdamecortexlaw | app-cortex-ame-prd-shared-rg | US_AUDIT_PROD |
-| CNT1 | APPIN_CORTEX_APPLICATION_GENERAL_CNT1 | App-Cortex-AME-CNT1-RG | prdamecortexlaw | app-cortex-ame-prd-shared-rg | US_AUDIT_PROD |
-| PRD | APPIN_CORTEX_APPLICATION_GENERAL_PRD | App-Cortex-AME-PRD-RG | prdamecortexlaw | app-cortex-ame-prd-shared-rg | US_AUDIT_PROD |
-| BCP | APPIN_CORTEX_APPLICATION_GENERAL_BCP | App-Cortex-AME-BCP-RG | bcpamecortexlaw | App-Cortex-AME-BCP-Shared-RG | US_AUDIT_PROD |
+| Env | App Insights | Resource Group | Log Analytics Workspace | LAW Resource Group | Subscription | Subscription ID |
+|-----|--------------|----------------|------------------------|-------------------|--------------|-----------------|
+| DEV | APPIN_CORTEX_APPLICATION_GENERAL_DEV | App-Cortex-AME-DEV-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| DEV1 | APPIN_CORTEX_APPLICATION_GENERAL_DEV1 | App-Cortex-AME-DEV1-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| DEV2 | APPIN_CORTEX_APPLICATION_GENERAL_DEV2 | App-Cortex-PaaS-AME-DEV2-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| QAS | APPIN_CORTEX_APPLICATION_GENERAL_QAS | App-Cortex-AME-QAS-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| QAS1 | APPIN_CORTEX_APPLICATION_GENERAL_QAS1 | App-Cortex-AME-QAS1-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| QAS2 | APPIN_CORTEX_APPLICATION_GENERAL_QAS2 | App-Cortex-PaaS-AME-QAS2-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| LOD | APPIN_CORTEX_APPLICATION_GENERAL_LOD | App-Cortex-AME-LOD-RG | npdamecortexlaw | App-Cortex-AME-NPD-Shared-RG | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| STG | APPIN_CORTEX_APPLICATION_GENERAL_STG | App-Cortex-AME-STG-RG | prdamecortexlaw | app-cortex-ame-prd-shared-rg | US_AUDIT_PROD | `7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` |
+| STG2 | APPIN_CORTEX_APPLICATION_GENERAL_STG2 | App-Cortex-PaaS-AME-STG2-RG | prdamecortexlaw | app-cortex-ame-prd-shared-rg | US_AUDIT_PROD | `7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` |
+| CNT1 | APPIN_CORTEX_APPLICATION_GENERAL_CNT1 | App-Cortex-AME-CNT1-RG | prdamecortexlaw | app-cortex-ame-prd-shared-rg | US_AUDIT_PROD | `7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` |
+| PRD | APPIN_CORTEX_APPLICATION_GENERAL_PRD | App-Cortex-AME-PRD-RG | prdamecortexlaw | app-cortex-ame-prd-shared-rg | US_AUDIT_PROD | `7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` |
+| BCP | APPIN_CORTEX_APPLICATION_GENERAL_BCP | App-Cortex-AME-BCP-RG | bcpamecortexlaw | App-Cortex-AME-BCP-Shared-RG | US_AUDIT_PROD | `7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` |
 
 ### EMA (Europe/Middle East/Africa) Environments
 
-| Env | App Insights | Resource Group | Log Analytics Workspace | LAW Resource Group | Subscription |
-|-----|--------------|----------------|------------------------|-------------------|--------------|
-| INT | APPIN_CORTEX_APPLICATION_GENERAL_INT | App-Cortex-PaaS-EMA-INT-RG | npdemacortexlaw | app-cortex-ema-npd-shared-rg | US_AUDIT_PREPROD |
-| STG | APPIN_CORTEX_APPLICATION_GENERAL_STG | App-Cortex-PaaS-EMA-STG-RG | npdemacortexlaw | app-cortex-ema-npd-shared-rg | US_AUDIT_PREPROD |
-| PRD | APPIN_CORTEX_APPLICATION_GENERAL_PRD | App-Cortex-PaaS-EMA-PRD-RG | prdemacortexlaw | app-cortex-ema-prd-shared-rg | US_AUDIT_PROD |
-| BCP | APPIN_CORTEX_APPLICATION_GENERAL_BCP | App-Cortex-PaaS-EMA-BCP-RG | bcpemacortexlaw | app-cortex-ema-bcp-shared-rg | US_AUDIT_PROD |
+| Env | App Insights | Resource Group | Log Analytics Workspace | LAW Resource Group | Subscription | Subscription ID |
+|-----|--------------|----------------|------------------------|-------------------|--------------|-----------------|
+| INT | APPIN_CORTEX_APPLICATION_GENERAL_INT | App-Cortex-PaaS-EMA-INT-RG | npdemacortexlaw | app-cortex-ema-npd-shared-rg | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| STG | APPIN_CORTEX_APPLICATION_GENERAL_STG | App-Cortex-PaaS-EMA-STG-RG | npdemacortexlaw | app-cortex-ema-npd-shared-rg | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| PRD | APPIN_CORTEX_APPLICATION_GENERAL_PRD | App-Cortex-PaaS-EMA-PRD-RG | prdemacortexlaw | app-cortex-ema-prd-shared-rg | US_AUDIT_PROD | `7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` |
+| BCP | APPIN_CORTEX_APPLICATION_GENERAL_BCP | App-Cortex-PaaS-EMA-BCP-RG | bcpemacortexlaw | app-cortex-ema-bcp-shared-rg | US_AUDIT_PROD | `7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` |
 
 ### APAC (Asia Pacific) Environments
 
-| Env | App Insights | Resource Group | Log Analytics Workspace | LAW Resource Group | Subscription |
-|-----|--------------|----------------|------------------------|-------------------|--------------|
-| STG | APPIN_CORTEX_APPLICATION_GENERAL_STG | App-Cortex-PaaS-APA-STG-RG | prdapacortexlaw | App-Cortex-APA-PRD-Shared-RG | b2fcc9cc-5757-42d3-980c-d92d66bab682 |
-| PRD | APPIN_CORTEX_APPLICATION_GENERAL_PRD | App-Cortex-PaaS-APA-PRD-RG | prdapacortexlaw | App-Cortex-APA-PRD-Shared-RG | b2fcc9cc-5757-42d3-980c-d92d66bab682 |
-| BCP | APPIN_CORTEX_APPLICATION_GENERAL_BCP | App-Cortex-PaaS-APA-BCP-RG | bcpapacortexlaw | App-Cortex-APA-BCP-Shared-RG | b2fcc9cc-5757-42d3-980c-d92d66bab682 |
+| Env | App Insights | Resource Group | Log Analytics Workspace | LAW Resource Group | Subscription | Subscription ID |
+|-----|--------------|----------------|------------------------|-------------------|--------------|-----------------|
+| STG | APPIN_CORTEX_APPLICATION_GENERAL_STG | App-Cortex-PaaS-APA-STG-RG | prdapacortexlaw | App-Cortex-APA-PRD-Shared-RG | US_AUDIT_APA | `b2fcc9cc-5757-42d3-980c-d92d66bab682` |
+| PRD | APPIN_CORTEX_APPLICATION_GENERAL_PRD | App-Cortex-PaaS-APA-PRD-RG | prdapacortexlaw | App-Cortex-APA-PRD-Shared-RG | US_AUDIT_APA | `b2fcc9cc-5757-42d3-980c-d92d66bab682` |
+| BCP | APPIN_CORTEX_APPLICATION_GENERAL_BCP | App-Cortex-PaaS-APA-BCP-RG | bcpapacortexlaw | App-Cortex-APA-BCP-Shared-RG | US_AUDIT_APA | `b2fcc9cc-5757-42d3-980c-d92d66bab682` |
+
+### Subscription Switching for Log Analysis
+
+**IMPORTANT**: Before querying logs for EMA or APA regions, you must switch to the correct Azure subscription.
+
+#### Quick Reference
+
+| Region | Subscription | Subscription ID | Switch Command |
+|--------|--------------|-----------------|----------------|
+| AME (Americas) Non-Prod | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` | `az account set -s 1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| AME (Americas) Prod | US_AUDIT_PROD | `7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` | `az account set -s 7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` |
+| EMA Non-Prod | US_AUDIT_PREPROD | `1b5b460a-3534-4769-be45-8c3cc3a1eb69` | `az account set -s 1b5b460a-3534-4769-be45-8c3cc3a1eb69` |
+| EMA Prod | US_AUDIT_PROD | `7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` | `az account set -s 7ce6ca13-2845-4f6a-9c2e-39675fc8c55e` |
+| **APA (Asia Pacific)** | US_AUDIT_APA | `b2fcc9cc-5757-42d3-980c-d92d66bab682` | `az account set -s b2fcc9cc-5757-42d3-980c-d92d66bab682` |
+
+#### Example: Query APA Production Logs
+
+```bash
+# Step 1: Switch to APA subscription
+az account set -s b2fcc9cc-5757-42d3-980c-d92d66bab682
+
+# Step 2: Verify subscription
+az account show --query "{Name:name, ID:id}" -o table
+
+# Step 3: Query Log Analytics
+az monitor log-analytics query \
+  --workspace prdapacortexlaw \
+  --analytics-query "AppExceptions | where TimeGenerated > ago(1h) | take 10"
+```
+
+#### Example: Query EMA Production Logs
+
+```bash
+# Step 1: Switch to EMA Prod subscription
+az account set -s 7ce6ca13-2845-4f6a-9c2e-39675fc8c55e
+
+# Step 2: Query Log Analytics
+az monitor log-analytics query \
+  --workspace prdemacortexlaw \
+  --analytics-query "AppExceptions | where TimeGenerated > ago(1h) | take 10"
+```
 
 ### Log Analytics Tables
 

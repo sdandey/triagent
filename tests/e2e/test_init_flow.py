@@ -159,6 +159,26 @@ class TestNodeJS:
         result = check_npm_installed()
         assert isinstance(result, bool)
 
+    def test_nodejs_detection(self):
+        """Test Node.js detection function."""
+        from triagent.mcp.setup import check_nodejs_installed
+
+        installed, version = check_nodejs_installed()
+        assert isinstance(installed, bool)
+        assert isinstance(version, str)
+
+    def test_install_nodejs_returns_tuple(self):
+        """Test install_nodejs returns proper tuple."""
+        from triagent.mcp.setup import install_nodejs
+
+        # Note: This tests the function signature
+        # If Node.js is installed, it returns (True, "Already installed: ...")
+        result = install_nodejs()
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert isinstance(result[0], bool)
+        assert isinstance(result[1], str)
+
     @pytest.mark.skipif(
         subprocess.run(["npm", "--version"], capture_output=True).returncode != 0,
         reason="npm not installed",
@@ -172,3 +192,18 @@ class TestNodeJS:
             timeout=30,
         )
         assert result.returncode == 0
+
+    @pytest.mark.skipif(
+        subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
+        reason="Node.js not installed",
+    )
+    def test_nodejs_available(self):
+        """Verify Node.js is available."""
+        result = subprocess.run(
+            ["node", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0
+        assert result.stdout.startswith("v")

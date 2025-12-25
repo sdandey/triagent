@@ -11,6 +11,13 @@ from typing import Any
 
 from triagent.config import ConfigManager
 
+# Required Azure CLI extensions for full functionality
+REQUIRED_AZURE_EXTENSIONS = [
+    "azure-devops",        # ADO operations
+    "application-insights",  # App Insights queries
+    "log-analytics",       # Log Analytics queries
+]
+
 MCP_SERVERS_CONFIG = {
     "azure-devops": {
         "command": "npx",
@@ -35,6 +42,113 @@ def check_npm_installed() -> bool:
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
+
+
+def check_nodejs_installed() -> tuple[bool, str]:
+    """Check if Node.js is installed.
+
+    Returns:
+        Tuple of (is_installed, version_string)
+    """
+    try:
+        result = subprocess.run(
+            ["node", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            return True, result.stdout.strip()
+        return False, ""
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False, ""
+
+
+def install_nodejs() -> tuple[bool, str]:
+    """Auto-install Node.js based on detected OS.
+
+    Supports:
+    - macOS: Homebrew
+    - Windows: winget
+    - Linux: NodeSource apt repository (Debian/Ubuntu)
+
+    Returns:
+        Tuple of (success, message)
+    """
+    # Check if already installed
+    installed, version = check_nodejs_installed()
+    if installed:
+        return True, f"Already installed: {version}"
+
+    system = platform.system().lower()
+
+    if system == "darwin":  # macOS
+        # Check if brew is available
+        if shutil.which("brew"):
+            try:
+                result = subprocess.run(
+                    ["brew", "install", "node"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                if result.returncode == 0:
+                    return True, "Installed via Homebrew"
+                return False, f"Homebrew install failed: {result.stderr}"
+            except subprocess.TimeoutExpired:
+                return False, "Installation timed out"
+        return False, "Homebrew not found. Install from: https://brew.sh"
+
+    elif system == "windows":
+        # Try winget first
+        if shutil.which("winget"):
+            try:
+                result = subprocess.run(
+                    ["winget", "install", "-e", "--id", "OpenJS.NodeJS.LTS", "-h"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                if result.returncode == 0:
+                    return True, "Installed via winget"
+                # winget may return non-zero even on success, check if node exists
+                installed, version = check_nodejs_installed()
+                if installed:
+                    return True, f"Installed via winget: {version}"
+            except subprocess.TimeoutExpired:
+                pass  # Fall through to manual instructions
+
+        return False, "winget install failed. Install manually from: https://nodejs.org"
+
+    elif system == "linux":
+        # Debian/Ubuntu installation via NodeSource
+        try:
+            # Run NodeSource setup script
+            setup_result = subprocess.run(
+                ["bash", "-c", "curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if setup_result.returncode != 0:
+                return False, f"NodeSource setup failed: {setup_result.stderr}"
+
+            # Install nodejs
+            install_result = subprocess.run(
+                ["sudo", "apt-get", "install", "-y", "nodejs"],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            if install_result.returncode == 0:
+                return True, "Installed via apt"
+            return False, f"apt install failed: {install_result.stderr}"
+        except subprocess.TimeoutExpired:
+            return False, "Installation timed out"
+        except FileNotFoundError:
+            return False, "curl or apt not found"
+
+    return False, f"Unsupported OS: {system}"
 
 
 def check_azure_cli_installed() -> tuple[bool, str]:
@@ -85,6 +199,48 @@ def install_azure_devops_extension() -> bool:
             capture_output=True,
             text=True,
             timeout=60,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def check_azure_extension(name: str) -> bool:
+    """Check if an Azure CLI extension is installed.
+
+    Args:
+        name: Extension name (e.g., 'azure-devops', 'log-analytics')
+
+    Returns:
+        True if extension is installed
+    """
+    try:
+        result = subprocess.run(
+            ["az", "extension", "show", "--name", name],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def install_azure_extension(name: str) -> bool:
+    """Install an Azure CLI extension.
+
+    Args:
+        name: Extension name to install
+
+    Returns:
+        True if installation succeeded
+    """
+    try:
+        result = subprocess.run(
+            ["az", "extension", "add", "--name", name, "-y"],
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -325,3 +481,76 @@ def get_databricks_token() -> str | None:
 
     # Fall back to config file
     return get_databricks_token_from_config()
+
+
+def check_claude_code_installed() -> tuple[bool, str]:
+    """Check if claude-code CLI is installed.
+
+    Returns:
+        Tuple of (is_installed, version_string)
+    """
+    # Try the global 'claude' command first
+    try:
+        result = subprocess.run(
+            ["claude", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            version = result.stdout.strip() or result.stderr.strip()
+            return True, version
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # Try via npx (slower but works if not globally installed)
+    try:
+        result = subprocess.run(
+            ["npx", "@anthropic-ai/claude-code", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            version = result.stdout.strip() or result.stderr.strip()
+            return True, f"(via npx) {version}"
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    return False, ""
+
+
+def install_claude_code() -> tuple[bool, str]:
+    """Install claude-code CLI globally via npm.
+
+    Returns:
+        Tuple of (success, message)
+    """
+    # Check if npm is available
+    if not check_npm_installed():
+        return False, "npm/Node.js not installed. Install from: https://nodejs.org"
+
+    # Check if already installed
+    installed, version = check_claude_code_installed()
+    if installed:
+        return True, f"Already installed: {version}"
+
+    # Install globally
+    try:
+        result = subprocess.run(
+            ["npm", "install", "-g", "@anthropic-ai/claude-code"],
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout for npm install
+        )
+        if result.returncode == 0:
+            # Verify installation
+            installed, version = check_claude_code_installed()
+            if installed:
+                return True, f"Installed: {version}"
+            return True, "Installed (restart terminal to use 'claude' command)"
+        return False, f"Installation failed: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return False, "Installation timed out"
+    except FileNotFoundError:
+        return False, "npm not found"
