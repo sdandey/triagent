@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import platform
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -87,6 +89,95 @@ def install_azure_devops_extension() -> bool:
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
+
+
+def install_azure_cli() -> tuple[bool, str]:
+    """Auto-install Azure CLI based on detected OS.
+
+    Supports:
+    - macOS: Homebrew
+    - Windows: winget or MSI installer
+    - Linux: apt (Debian/Ubuntu)
+
+    Returns:
+        Tuple of (success, message)
+    """
+    # Check if already installed
+    installed, version = check_azure_cli_installed()
+    if installed:
+        return True, f"Already installed: {version}"
+
+    system = platform.system().lower()
+
+    if system == "darwin":  # macOS
+        # Check if brew is available
+        if shutil.which("brew"):
+            try:
+                result = subprocess.run(
+                    ["brew", "install", "azure-cli"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                if result.returncode == 0:
+                    return True, "Installed via Homebrew"
+                return False, f"Homebrew install failed: {result.stderr}"
+            except subprocess.TimeoutExpired:
+                return False, "Installation timed out"
+        return False, "Homebrew not found. Install from: https://brew.sh"
+
+    elif system == "windows":
+        # Try winget first
+        if shutil.which("winget"):
+            try:
+                result = subprocess.run(
+                    ["winget", "install", "-e", "--id", "Microsoft.AzureCLI", "-h"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                if result.returncode == 0:
+                    return True, "Installed via winget"
+            except subprocess.TimeoutExpired:
+                pass  # Fall through to MSI
+
+        # Fall back to PowerShell MSI installer
+        ps_script = (
+            "Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows "
+            "-OutFile $env:TEMP\\AzureCLI.msi; "
+            "Start-Process msiexec.exe -Wait -ArgumentList "
+            "'/I', \"$env:TEMP\\AzureCLI.msi\", '/quiet'; "
+            "Remove-Item $env:TEMP\\AzureCLI.msi"
+        )
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command", ps_script],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            if result.returncode == 0:
+                return True, "Installed via MSI"
+            return False, f"MSI installation failed: {result.stderr}"
+        except subprocess.TimeoutExpired:
+            return False, "Installation timed out"
+
+    elif system == "linux":
+        # Debian/Ubuntu installation
+        try:
+            result = subprocess.run(
+                ["bash", "-c", "curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash"],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            if result.returncode == 0:
+                return True, "Installed via apt"
+            return False, f"Installation failed: {result.stderr}"
+        except subprocess.TimeoutExpired:
+            return False, "Installation timed out"
+
+    return False, f"Unsupported OS: {system}"
 
 
 def run_azure_login() -> bool:

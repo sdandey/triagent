@@ -8,7 +8,15 @@ Triagent is a Claude-powered CLI for Azure DevOps automation. It provides an int
 
 ## Build and Development Commands
 
+**IMPORTANT**: Always activate the virtual environment before running any commands.
+
 ```bash
+# Activate virtual environment (ALWAYS do this first)
+source .venv/bin/activate
+
+# Sync dependencies (using uv)
+uv sync
+
 # Install with development dependencies (using uv)
 uv pip install -e ".[dev]"
 

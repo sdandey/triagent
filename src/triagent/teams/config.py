@@ -16,8 +16,6 @@ class TeamConfig:
     ado_organization: str
     claude_md: str
     description: str = ""
-    kusto_cluster: str = ""
-    default_repository: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -28,8 +26,6 @@ class TeamConfig:
             "ado_organization": self.ado_organization,
             "claude_md": self.claude_md,
             "description": self.description,
-            "kusto_cluster": self.kusto_cluster,
-            "default_repository": self.default_repository,
         }
 
 

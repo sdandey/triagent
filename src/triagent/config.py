@@ -24,9 +24,10 @@ class TriagentConfig:
     azure_cli_authenticated: bool = False
     ado_organization: str = "symphonyvsts"
     ado_project: str = "Audit Cortex 2"
-    default_repository: str = ""
-    kusto_cluster: str = ""
     verbose: bool = False
+    # SSL settings for corporate environments
+    disable_ssl_verify: bool = True  # Default ON for corporate proxies
+    ssl_cert_file: str | None = None  # Path to CA bundle for NODE_EXTRA_CA_CERTS
 
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
@@ -35,9 +36,9 @@ class TriagentConfig:
             "azure_cli_authenticated": self.azure_cli_authenticated,
             "ado_organization": self.ado_organization,
             "ado_project": self.ado_project,
-            "default_repository": self.default_repository,
-            "kusto_cluster": self.kusto_cluster,
             "verbose": self.verbose,
+            "disable_ssl_verify": self.disable_ssl_verify,
+            "ssl_cert_file": self.ssl_cert_file,
         }
 
     @classmethod
@@ -48,9 +49,9 @@ class TriagentConfig:
             azure_cli_authenticated=data.get("azure_cli_authenticated", False),
             ado_organization=data.get("ado_organization", "symphonyvsts"),
             ado_project=data.get("ado_project", "Audit Cortex 2"),
-            default_repository=data.get("default_repository", ""),
-            kusto_cluster=data.get("kusto_cluster", ""),
             verbose=data.get("verbose", False),
+            disable_ssl_verify=data.get("disable_ssl_verify", True),
+            ssl_cert_file=data.get("ssl_cert_file"),
         )
 
 

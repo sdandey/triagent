@@ -14,6 +14,7 @@ from triagent.mcp.setup import (
     check_azure_cli_installed,
     check_azure_devops_extension,
     get_azure_account,
+    install_azure_cli,
     install_azure_devops_extension,
     run_azure_login,
     setup_mcp_servers,
@@ -98,7 +99,7 @@ def init_command(console: Console, config_manager: ConfigManager) -> bool:
 
 
 def _step_azure_cli(console: Console) -> bool:
-    """Step 1: Check Azure CLI installation."""
+    """Step 1: Check and auto-install Azure CLI."""
     console.print("[bold]Step 1/5: Azure CLI Installation[/bold]")
     console.print("-" * 40)
 
@@ -107,13 +108,33 @@ def _step_azure_cli(console: Console) -> bool:
     if installed:
         console.print(f"[green]✓[/green] Azure CLI is installed: {version}")
     else:
-        console.print("[red]✗[/red] Azure CLI is not installed")
+        console.print("[yellow]Azure CLI not detected. Installing...[/yellow]")
 
-        if confirm_prompt("Open installation guide in browser?", default=True):
-            webbrowser.open(AZURE_CLI_INSTALL_URL)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            progress.add_task("Installing Azure CLI (this may take a few minutes)...")
+            success, message = install_azure_cli()
 
-        console.print("[yellow]Please install Azure CLI and run /init again[/yellow]")
-        return False
+        if success:
+            console.print(f"[green]✓[/green] Azure CLI installed: {message}")
+            # Verify installation
+            installed, version = check_azure_cli_installed()
+            if installed:
+                console.print(f"[green]✓[/green] Verified: {version}")
+            else:
+                console.print("[yellow]Note: You may need to restart your terminal[/yellow]")
+        else:
+            console.print(f"[red]✗[/red] Auto-install failed: {message}")
+            console.print("[yellow]Please install manually:[/yellow]")
+            console.print(f"  {AZURE_CLI_INSTALL_URL}")
+
+            if confirm_prompt("Open installation guide in browser?", default=True):
+                webbrowser.open(AZURE_CLI_INSTALL_URL)
+
+            return False
 
     # Check Azure DevOps extension
     if check_azure_devops_extension():
