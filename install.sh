@@ -470,8 +470,8 @@ main() {
     # Initialize colors
     setup_colors
 
-    # Auto-enable non-interactive in CI
-    if is_ci; then
+    # Auto-enable non-interactive in CI or when not running in a terminal (piped input)
+    if is_ci || ! is_tty; then
         non_interactive=true
     fi
 
