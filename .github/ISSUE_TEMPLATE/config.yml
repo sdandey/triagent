@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/sdandey/triagent#readme
+    about: Visit the README for installation and usage guides
+  - name: Discussions
+    url: https://github.com/sdandey/triagent/discussions
+    about: Ask questions and discuss Triagent with the community
