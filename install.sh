@@ -177,6 +177,7 @@ check_python_version() {
 
 find_python() {
     local candidates=("python3.12" "python3.11" "python3" "python")
+    local version
 
     for cmd in "${candidates[@]}"; do
         if command -v "$cmd" &>/dev/null; then
