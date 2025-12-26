@@ -53,11 +53,9 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
-      - name: Create GitHub Release
+      - name: Upload assets to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${{ steps.release.outputs.version }}" \
-            --title "v${{ steps.release.outputs.version }}" \
-            --generate-notes \
-            dist/*
+          # semantic-release already creates the release, just upload assets
+          gh release upload "v${{ steps.release.outputs.version }}" dist/* --clobber || true
