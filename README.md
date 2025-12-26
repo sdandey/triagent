@@ -13,8 +13,39 @@ Triagent is an interactive command-line tool that uses Claude AI (via Azure AI F
 
 ## Installation
 
+### Quick Install (Recommended)
+
+**macOS/Linux:**
 ```bash
+curl -sSL https://raw.githubusercontent.com/sdandey/triagent/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/sdandey/triagent/main/install.ps1 | iex
+```
+
+### Alternative Methods
+
+```bash
+# Using pipx (recommended for CLI tools)
+pipx install triagent
+
+# Using uv
+uv tool install triagent
+
+# Using pip
 pip install triagent
+```
+
+### Install Specific Version
+
+```bash
+# macOS/Linux
+curl -sSL https://raw.githubusercontent.com/sdandey/triagent/main/install.sh | bash -s -- --version 0.2.0
+
+# Windows
+.\install.ps1 -Version "0.2.0"
 ```
 
 ## Quick Start
