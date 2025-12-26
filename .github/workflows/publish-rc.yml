@@ -10,6 +10,9 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/triagent
 
     steps:
       - uses: actions/checkout@v4
