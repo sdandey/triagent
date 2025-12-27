@@ -25,6 +25,7 @@ from triagent.commands.team_report import team_report_command
 from triagent.config import ConfigManager, get_config_manager
 from triagent.sdk_client import create_sdk_client
 from triagent.teams.config import get_team_config
+from triagent.utils.windows import find_git_bash, is_windows
 from triagent.versions import (
     AZURE_EXTENSION_VERSIONS,
     CLAUDE_CODE_VERSION,
@@ -493,6 +494,24 @@ async def interactive_loop_async(
         if not init_command(console, config_manager):
             console.print("[red]Setup failed. Exiting.[/red]")
             return
+
+    # Windows: Early check for Git Bash before attempting to start Claude Code
+    if is_windows() and not find_git_bash():
+        console.print(
+            "[red]Error: Git Bash is required on Windows but was not found.[/red]"
+        )
+        console.print()
+        console.print("[yellow]To fix this:[/yellow]")
+        console.print(
+            "  1. Install Git for Windows from: https://git-scm.com/downloads/win"
+        )
+        console.print("  2. OR set CLAUDE_CODE_GIT_BASH_PATH to your bash.exe location:")
+        console.print("     [cyan]Common locations:[/cyan]")
+        console.print("       C:\\Program Files\\Git\\bin\\bash.exe")
+        console.print("       C:\\Program Files (x86)\\Git\\bin\\bash.exe")
+        console.print()
+        console.print("[dim]After installing Git, restart your terminal and try again.[/dim]")
+        return
 
     # Build SDK options
     client_factory = create_sdk_client(config_manager)

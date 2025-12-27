@@ -21,6 +21,7 @@ from triagent.config import ConfigManager
 from triagent.hooks import get_triagent_hooks
 from triagent.mcp.tools import create_triagent_mcp_server
 from triagent.prompts.system import get_system_prompt
+from triagent.utils.windows import get_git_bash_env, is_windows
 from triagent.versions import MCP_AZURE_DEVOPS_VERSION
 
 
@@ -123,6 +124,10 @@ class TriagentSDKClient:
 
         # Start with Foundry auth environment
         env = get_foundry_env(self.config_manager)
+
+        # On Windows, set CLAUDE_CODE_GIT_BASH_PATH for Claude Code CLI
+        if is_windows():
+            env.update(get_git_bash_env())
 
         # Get the model based on provider
         model = None

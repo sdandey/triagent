@@ -154,19 +154,69 @@ def install_nodejs() -> tuple[bool, str]:
 def _find_az_command() -> str | None:
     """Find the az command path.
 
-    Checks both system PATH and common pip install locations (~/.local/bin).
+    Checks system PATH, pip install locations, and Windows install paths.
+    Uses environment variables for dynamic path detection (AWS WorkSpaces compatible).
 
     Returns:
         Path to az command or None if not found
     """
-    # Try system PATH first
+    import os
+
+    # Try system PATH first (works after terminal restart)
     if shutil.which("az"):
         return "az"
 
-    # Check common pip install locations
+    # Windows: Try az.cmd in PATH (cmd extension)
+    if platform.system() == "Windows":
+        if shutil.which("az.cmd"):
+            return "az.cmd"
+
+    # Check common pip install locations (Linux/macOS)
     local_az = Path.home() / ".local" / "bin" / "az"
     if local_az.exists():
         return str(local_az)
+
+    # Windows: Check pip --user install locations
+    if platform.system() == "Windows":
+        # Pip --user installs to %APPDATA%\Python\PythonXX\Scripts
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            # Check common Python versions
+            for py_ver in ["Python312", "Python311", "Python310", "Python39"]:
+                scripts_az = Path(appdata) / "Python" / py_ver / "Scripts" / "az.exe"
+                if scripts_az.exists():
+                    return str(scripts_az)
+                # Also check for az.cmd
+                scripts_az_cmd = Path(appdata) / "Python" / py_ver / "Scripts" / "az.cmd"
+                if scripts_az_cmd.exists():
+                    return str(scripts_az_cmd)
+
+        # Check LOCALAPPDATA for user-level Python installs
+        localappdata = os.environ.get("LOCALAPPDATA")
+        if localappdata:
+            for py_ver in ["Python312", "Python311", "Python310", "Python39"]:
+                scripts_az = (
+                    Path(localappdata) / "Programs" / "Python" / py_ver / "Scripts" / "az.exe"
+                )
+                if scripts_az.exists():
+                    return str(scripts_az)
+
+        # Program Files locations (MSI install) - use env var for drive letter
+        program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+        program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+
+        windows_paths = [
+            Path(program_files) / "Microsoft SDKs" / "Azure" / "CLI2" / "wbin" / "az.cmd",
+            Path(program_files_x86) / "Microsoft SDKs" / "Azure" / "CLI2" / "wbin" / "az.cmd",
+        ]
+        if localappdata:
+            windows_paths.append(
+                Path(localappdata) / "Programs" / "Azure CLI" / "wbin" / "az.cmd"
+            )
+
+        for path in windows_paths:
+            if path.exists():
+                return str(path)
 
     return None
 
@@ -339,12 +389,12 @@ def _install_azure_cli_pip() -> tuple[bool, str]:
 
 
 def install_azure_cli() -> tuple[bool, str]:
-    """Auto-install Azure CLI based on detected OS with pip fallback.
+    """Auto-install Azure CLI based on detected OS with pip as preferred on Windows.
 
-    Supports:
-    - macOS: Homebrew, then pip fallback
-    - Windows: winget or MSI installer, then pip fallback
-    - Linux: apt (Debian/Ubuntu), then pip fallback
+    Install priority:
+    - macOS: Homebrew, then pip
+    - Windows: pip (no restart needed), then winget (often blocked by Group Policy)
+    - Linux: apt (Debian/Ubuntu), then pip
 
     Returns:
         Tuple of (success, message)
@@ -375,42 +425,36 @@ def install_azure_cli() -> tuple[bool, str]:
         return _install_azure_cli_pip()
 
     elif system == "windows":
-        # Try winget first
+        # CHANGED: Try pip FIRST on Windows (most reliable, no restart needed)
+        # pip installs to %APPDATA%\Python\PythonXX\Scripts which we detect
+        success, msg = _install_azure_cli_pip()
+        if success:
+            return success, msg
+
+        # Fallback to winget (often blocked by Group Policy in corporate environments)
         if shutil.which("winget"):
             try:
                 result = subprocess.run(
-                    ["winget", "install", "-e", "--id", "Microsoft.AzureCLI", "-h"],
+                    [
+                        "winget",
+                        "install",
+                        "-e",
+                        "--id",
+                        "Microsoft.AzureCLI",
+                        "-h",
+                        "--accept-source-agreements",
+                        "--accept-package-agreements",
+                    ],
                     capture_output=True,
                     text=True,
                     timeout=300,
                 )
                 if result.returncode == 0:
-                    return True, "Installed via winget"
+                    return True, "Installed via winget (restart terminal to use)"
             except subprocess.TimeoutExpired:
-                pass  # Fall through to MSI
+                pass
 
-        # Try PowerShell MSI installer
-        ps_script = (
-            "Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows "
-            "-OutFile $env:TEMP\\AzureCLI.msi; "
-            "Start-Process msiexec.exe -Wait -ArgumentList "
-            "'/I', \"$env:TEMP\\AzureCLI.msi\", '/quiet'; "
-            "Remove-Item $env:TEMP\\AzureCLI.msi"
-        )
-        try:
-            result = subprocess.run(
-                ["powershell", "-Command", ps_script],
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-            if result.returncode == 0:
-                return True, "Installed via MSI"
-        except subprocess.TimeoutExpired:
-            pass  # Fall through to pip
-
-        # Fallback to pip
-        return _install_azure_cli_pip()
+        return False, "pip install failed. Try: pip install azure-cli"
 
     elif system == "linux":
         # Try Debian/Ubuntu installation first
