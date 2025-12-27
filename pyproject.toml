@@ -1,6 +1,6 @@
 [project]
 name = "triagent"
-version = "1.2.0"
+version = "1.2.1.dev1"
 description = "Claude-powered CLI for Azure DevOps automation"
 readme = "README.md"
 license = { text = "MIT" }
