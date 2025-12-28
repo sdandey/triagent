@@ -167,6 +167,7 @@ function Install-Python {
             "-e",
             "--id", "Python.Python.3.12",
             "-h",
+            "--force",
             "--accept-source-agreements",
             "--accept-package-agreements"
         ) -Wait -PassThru -NoNewWindow
