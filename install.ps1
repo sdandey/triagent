@@ -15,6 +15,9 @@
 .PARAMETER NoColor
     Disable colored output
 
+.PARAMETER UseTestPyPI
+    Install from TestPyPI instead of PyPI (for testing pre-release versions)
+
 .EXAMPLE
     # Interactive installation
     .\install.ps1
@@ -22,6 +25,10 @@
 .EXAMPLE
     # Install specific version non-interactively
     .\install.ps1 -Version "0.2.0" -NonInteractive
+
+.EXAMPLE
+    # Install from TestPyPI (for testing pre-release versions)
+    .\install.ps1 -UseTestPyPI -Version "1.2.1.dev1"
 
 .EXAMPLE
     # Piped installation
@@ -40,12 +47,16 @@ param(
     [switch]$NonInteractive,
 
     [Parameter()]
-    [switch]$NoColor
+    [switch]$NoColor,
+
+    [Parameter()]
+    [switch]$UseTestPyPI
 )
 
 # Configuration
 $script:MinPythonVersion = [version]"3.11.0"
 $script:PackageName = "triagent"
+$script:UseTestPyPI = $UseTestPyPI
 
 # ============================================================================
 # Output Functions
@@ -294,12 +305,14 @@ function Install-Triagent {
     # Check if already installed
     $listOutput = & pipx list 2>&1
     if ($listOutput -match $script:PackageName) {
-        Write-Warn "$($script:PackageName) is already installed. Upgrading..."
-        & pipx upgrade $script:PackageName 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            & pipx uninstall $script:PackageName 2>$null
-            & pipx install $package
-        }
+        Write-Warn "$($script:PackageName) is already installed. Reinstalling..."
+        & pipx uninstall $script:PackageName 2>$null
+    }
+
+    # Build install command with optional TestPyPI
+    if ($script:UseTestPyPI) {
+        Write-Info "Using TestPyPI index..."
+        & pipx install $package --pip-args "--index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/"
     } else {
         & pipx install $package
     }

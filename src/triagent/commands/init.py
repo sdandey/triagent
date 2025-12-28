@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import getpass
 import platform
-import webbrowser
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
@@ -27,8 +29,91 @@ from triagent.mcp.setup import (
     setup_mcp_servers,
 )
 from triagent.teams.config import TEAM_CONFIG, get_team_config
+from triagent.utils.windows import (
+    check_winget_available,
+    find_git_bash,
+    install_git_windows,
+    is_windows,
+)
 
 AZURE_CLI_INSTALL_URL = "https://docs.microsoft.com/en-us/cli/azure/install-azure-cli"
+
+
+@dataclass
+class InitFailure:
+    """Represents a failure during initialization."""
+
+    step: str
+    component: str
+    error: str
+    manual_fix: str
+
+
+@dataclass
+class InitReport:
+    """Tracks initialization results for reporting."""
+
+    failures: list[InitFailure] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    successes: list[str] = field(default_factory=list)
+
+    def add_failure(
+        self, step: str, component: str, error: str, manual_fix: str
+    ) -> None:
+        """Add a failure to the report."""
+        self.failures.append(InitFailure(step, component, error, manual_fix))
+
+    def add_warning(self, message: str) -> None:
+        """Add a warning to the report."""
+        self.warnings.append(message)
+
+    def add_success(self, message: str) -> None:
+        """Add a success to the report."""
+        self.successes.append(message)
+
+    def has_failures(self) -> bool:
+        """Check if there are any failures."""
+        return len(self.failures) > 0
+
+    def write_log(self, config_dir: Path) -> Path:
+        """Write failures to a log file.
+
+        Args:
+            config_dir: Directory to write the log file to
+
+        Returns:
+            Path to the written log file
+        """
+        log_file = config_dir / f"init-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+        with open(log_file, "w") as f:
+            f.write("=" * 60 + "\n")
+            f.write("TRIAGENT INIT REPORT\n")
+            f.write(f"Generated: {datetime.now().isoformat()}\n")
+            f.write("=" * 60 + "\n\n")
+
+            if self.successes:
+                f.write("SUCCESSES:\n")
+                for s in self.successes:
+                    f.write(f"  [OK] {s}\n")
+                f.write("\n")
+
+            if self.warnings:
+                f.write("WARNINGS:\n")
+                for w in self.warnings:
+                    f.write(f"  [!] {w}\n")
+                f.write("\n")
+
+            if self.failures:
+                f.write("FAILURES (with manual fix instructions):\n")
+                f.write("-" * 60 + "\n")
+                for fail in self.failures:
+                    f.write(f"\nStep: {fail.step}\n")
+                    f.write(f"Component: {fail.component}\n")
+                    f.write(f"Error: {fail.error}\n")
+                    f.write(f"Manual Fix:\n  {fail.manual_fix}\n")
+                    f.write("-" * 60 + "\n")
+
+        return log_file
 
 # API Provider options
 API_PROVIDERS = [
@@ -65,6 +150,9 @@ def init_command(console: Console, config_manager: ConfigManager) -> bool:
     Returns:
         True if setup completed successfully
     """
+    # Initialize the report to track successes, warnings, and failures
+    report = InitReport()
+
     console.print()
     console.print(
         Panel(
@@ -75,13 +163,11 @@ def init_command(console: Console, config_manager: ConfigManager) -> bool:
     )
     console.print()
 
-    # Step 1: Azure CLI
-    if not _step_azure_cli(console):
-        return False
+    # Step 1: Azure CLI (non-blocking - continues even if it fails)
+    _step_azure_cli(console, report)
 
-    # Step 2: Azure Authentication
-    if not _step_azure_auth(console, config_manager):
-        return False
+    # Step 2: Azure Authentication (non-blocking - continues even if it fails)
+    _step_azure_auth(console, config_manager, report)
 
     # Step 3: API Provider Selection
     credentials = _step_api_provider(console, config_manager)
@@ -95,21 +181,31 @@ def init_command(console: Console, config_manager: ConfigManager) -> bool:
     _step_mcp_setup(console, config_manager, config)
 
     # Step 6: Claude Code CLI
-    _step_claude_code(console)
+    _step_claude_code(console, report)
 
     # Save configuration
     config_manager.save_config(config)
     if credentials:
         config_manager.save_credentials(credentials)
 
-    # Show completion summary
-    _show_completion(console, config_manager, config)
+    # Show completion summary (includes failure report if any)
+    _show_completion(console, config_manager, config, report)
 
     return True
 
 
-def _step_azure_cli(console: Console) -> bool:
-    """Step 1: Check and auto-install Azure CLI and extensions."""
+def _step_azure_cli(console: Console, report: InitReport) -> bool:
+    """Step 1: Check and auto-install Azure CLI and extensions.
+
+    This step is non-blocking - failures are logged to report but setup continues.
+
+    Args:
+        console: Rich console for output
+        report: InitReport to track successes and failures
+
+    Returns:
+        True (always continues to next step)
+    """
     console.print("[bold]Step 1/6: Azure CLI Installation[/bold]")
     console.print("-" * 40)
 
@@ -117,6 +213,7 @@ def _step_azure_cli(console: Console) -> bool:
 
     if installed:
         console.print(f"[green]✓[/green] Azure CLI is installed: {version}")
+        report.add_success(f"Azure CLI: {version}")
     else:
         console.print("[yellow]Azure CLI not detected. Installing...[/yellow]")
 
@@ -130,29 +227,37 @@ def _step_azure_cli(console: Console) -> bool:
 
         if success:
             console.print(f"[green]✓[/green] Azure CLI installed: {message}")
+            report.add_success(f"Azure CLI installed: {message}")
             # Verify installation
             installed, version = check_azure_cli_installed()
             if installed:
                 console.print(f"[green]✓[/green] Verified: {version}")
             else:
                 console.print("[yellow]Note: You may need to restart your terminal[/yellow]")
+                report.add_warning("Azure CLI may need terminal restart to be available")
         else:
-            console.print(f"[red]✗[/red] Auto-install failed: {message}")
-            console.print("[yellow]Please install manually:[/yellow]")
-            console.print(f"  {AZURE_CLI_INSTALL_URL}")
+            console.print(f"[yellow]⚠[/yellow] Auto-install failed: {message}")
+            console.print("[dim]Will continue with other setup steps...[/dim]")
+            report.add_failure(
+                step="Step 1/6",
+                component="Azure CLI",
+                error=message,
+                manual_fix=(
+                    "pip install azure-cli\n"
+                    f"  OR\n  Download from: {AZURE_CLI_INSTALL_URL}"
+                ),
+            )
+            console.print()
+            return True  # Continue anyway
 
-            if confirm_prompt("Open installation guide in browser?", default=True):
-                webbrowser.open(AZURE_CLI_INSTALL_URL)
-
-            return False
-
-    # Install all required Azure CLI extensions
+    # Install all required Azure CLI extensions (non-blocking)
     console.print()
     console.print("[dim]Checking Azure CLI extensions...[/dim]")
 
     for ext_name in REQUIRED_AZURE_EXTENSIONS:
         if check_azure_extension(ext_name):
             console.print(f"[green]✓[/green] {ext_name} extension installed")
+            report.add_success(f"Extension: {ext_name}")
         else:
             console.print(f"[yellow]Installing {ext_name} extension...[/yellow]")
             with Progress(
@@ -163,19 +268,41 @@ def _step_azure_cli(console: Console) -> bool:
                 progress.add_task(f"Installing {ext_name}...")
                 if install_azure_extension(ext_name):
                     console.print(f"[green]✓[/green] {ext_name} extension installed")
+                    report.add_success(f"Extension: {ext_name}")
                 else:
-                    console.print(f"[red]✗[/red] Failed to install {ext_name} extension")
-                    console.print(f"Try manually: az extension add --name {ext_name}")
-                    # Don't fail for optional extensions (only azure-devops is critical)
-                    if ext_name == "azure-devops":
-                        return False
+                    console.print(f"[yellow]⚠[/yellow] {ext_name} extension failed (will continue)")
+                    report.add_failure(
+                        step="Step 1/6",
+                        component=f"Azure CLI extension: {ext_name}",
+                        error="Extension installation failed",
+                        manual_fix=(
+                            f"az extension add --name {ext_name}\n"
+                            f"  OR\n  pip install azure-cli-{ext_name}"
+                        ),
+                    )
+                    report.add_warning(
+                        f"{ext_name} extension not installed - some features may not work"
+                    )
 
     console.print()
-    return True
+    return True  # Always continue
 
 
-def _step_azure_auth(console: Console, config_manager: ConfigManager) -> bool:
-    """Step 2: Azure Authentication."""
+def _step_azure_auth(
+    console: Console, config_manager: ConfigManager, report: InitReport
+) -> bool:
+    """Step 2: Azure Authentication.
+
+    This step is non-blocking - failures are logged to report but setup continues.
+
+    Args:
+        console: Rich console for output
+        config_manager: Config manager instance
+        report: InitReport to track successes and failures
+
+    Returns:
+        True (always continues to next step)
+    """
     console.print("[bold]Step 2/6: Azure Authentication[/bold]")
     console.print("-" * 40)
 
@@ -184,6 +311,7 @@ def _step_azure_auth(console: Console, config_manager: ConfigManager) -> bool:
     if account:
         user = account.get("user", {}).get("name", "Unknown")
         console.print(f"[green]✓[/green] Already authenticated as: {user}")
+        report.add_success(f"Azure authenticated: {user}")
 
         if not confirm_prompt("Use this account?", default=True):
             account = None
@@ -195,20 +323,33 @@ def _step_azure_auth(console: Console, config_manager: ConfigManager) -> bool:
             if account:
                 user = account.get("user", {}).get("name", "Unknown")
                 console.print(f"[green]✓[/green] Authenticated as: {user}")
+                report.add_success(f"Azure authenticated: {user}")
             else:
-                console.print("[red]✗[/red] Authentication failed")
-                return False
+                console.print("[yellow]⚠[/yellow] Authentication failed (will continue)")
+                report.add_failure(
+                    step="Step 2/6",
+                    component="Azure Authentication",
+                    error="Failed to get account info after login",
+                    manual_fix="az login",
+                )
         else:
-            console.print("[red]✗[/red] Azure login failed")
-            return False
+            console.print("[yellow]⚠[/yellow] Azure login failed (will continue)")
+            report.add_failure(
+                step="Step 2/6",
+                component="Azure Authentication",
+                error="Azure login command failed",
+                manual_fix="az login",
+            )
+            report.add_warning("Azure authentication failed - some features may not work")
 
-    # Update config
-    config = config_manager.load_config()
-    config.azure_cli_authenticated = True
-    config_manager.save_config(config)
+    # Update config if authenticated
+    if account:
+        config = config_manager.load_config()
+        config.azure_cli_authenticated = True
+        config_manager.save_config(config)
 
     console.print()
-    return True
+    return True  # Always continue
 
 
 def _step_api_provider(
@@ -582,20 +723,97 @@ def _show_manual_install_instructions(console: Console, system: str) -> None:
     console.print("[dim]Or use legacy mode: triagent --legacy[/dim]")
 
 
-def _step_claude_code(console: Console) -> bool:
+def _step_claude_code(console: Console, report: InitReport) -> bool:
     """Step 6: Claude Code CLI Installation.
 
     This step checks for Node.js and claude-code CLI.
     If not installed, attempts auto-install. If that fails,
     shows manual installation instructions.
 
+    On Windows, also checks for Git Bash which is required by Claude Code CLI.
+
+    Args:
+        console: Rich console for output
+        report: InitReport to track successes and failures
+
     Returns:
         True if claude-code is available or user accepted fallback to legacy
     """
+    import os
+
     console.print("[bold]Step 6/6: Claude Code CLI[/bold]")
     console.print("-" * 40)
 
     system = platform.system().lower()
+
+    # Windows: Check for Git Bash before proceeding (required by Claude Code CLI)
+    if is_windows():
+        bash_path = find_git_bash()
+
+        if not bash_path:
+            console.print("[yellow]Git Bash is required on Windows but was not found.[/yellow]")
+            console.print()
+
+            # Try auto-install with winget
+            if check_winget_available():
+                if confirm_prompt("Install Git for Windows automatically?", default=True):
+                    console.print()
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        console=console,
+                    ) as progress:
+                        progress.add_task("Installing Git for Windows via winget...")
+                        if install_git_windows():
+                            console.print("[green]✓[/green] Git installed successfully!")
+                            report.add_success("Git for Windows installed")
+                            # Re-check for bash after installation
+                            bash_path = find_git_bash()
+                            if not bash_path:
+                                console.print(
+                                    "[yellow]Git installed but bash.exe not found "
+                                    "in expected location.[/yellow]"
+                                )
+                                console.print(
+                                    "[dim]Please restart your terminal and run /init again.[/dim]"
+                                )
+                                report.add_warning("Git installed but bash.exe not found - restart terminal")
+                                console.print()
+                                return True  # Don't fail setup
+                        else:
+                            console.print("[yellow]⚠[/yellow] Git installation failed.")
+                            report.add_failure(
+                                step="Step 6/6",
+                                component="Git for Windows",
+                                error="winget installation failed",
+                                manual_fix="Download from: https://git-scm.com/downloads/win",
+                            )
+                            console.print()
+                            return True  # Don't fail setup
+                else:
+                    report.add_warning("Git for Windows not installed - Claude Code may not work")
+                    console.print()
+                    return True  # Don't fail setup
+            else:
+                # No winget available - show manual instructions
+                console.print("[dim]winget not available for auto-install.[/dim]")
+                console.print()
+                console.print("[yellow]Please install Git for Windows manually:[/yellow]")
+                console.print("  https://git-scm.com/downloads/win")
+                report.add_failure(
+                    step="Step 6/6",
+                    component="Git for Windows",
+                    error="winget not available and Git not found",
+                    manual_fix="Download from: https://git-scm.com/downloads/win",
+                )
+                console.print()
+                return True  # Don't fail setup
+
+        # Git Bash found - set env var for this process and subprocesses
+        os.environ["CLAUDE_CODE_GIT_BASH_PATH"] = bash_path
+        console.print(f"[green]✓[/green] Git Bash found: {bash_path}")
+        report.add_success(f"Git Bash: {bash_path}")
+        console.print()
 
     # Step 1: Check/Install Node.js
     nodejs_installed, nodejs_version = check_nodejs_installed()
@@ -674,8 +892,16 @@ def _show_completion(
     console: Console,
     config_manager: ConfigManager,
     config: TriagentConfig,
+    report: InitReport,
 ) -> None:
-    """Show setup completion summary."""
+    """Show setup completion summary with failure report if any.
+
+    Args:
+        console: Rich console for output
+        config_manager: Config manager instance
+        config: Configuration object
+        report: InitReport with successes, warnings, and failures
+    """
     team_config = get_team_config(config.team)
     team_name = team_config.display_name if team_config else config.team
 
@@ -696,3 +922,34 @@ def _show_completion(
         )
     )
     console.print()
+
+    # Show failure report if there were any issues
+    if report.has_failures():
+        # Write log file
+        config_manager.ensure_dirs()
+        log_file = report.write_log(config_manager.config_dir)
+
+        # Build failure list
+        failure_list = "\n".join([f"  • {f.component}" for f in report.failures])
+
+        console.print(
+            Panel(
+                f"[bold yellow]Some components failed to install[/bold yellow]\n\n"
+                f"The following issues need manual attention:\n"
+                f"{failure_list}\n\n"
+                f"[dim]Full details and fix instructions saved to:[/dim]\n"
+                f"  {log_file}",
+                border_style="yellow",
+            )
+        )
+        console.print()
+    elif report.warnings:
+        # Show warnings even if no failures
+        warning_list = "\n".join([f"  • {w}" for w in report.warnings])
+        console.print(
+            Panel(
+                f"[bold yellow]Warnings[/bold yellow]\n\n{warning_list}",
+                border_style="yellow",
+            )
+        )
+        console.print()

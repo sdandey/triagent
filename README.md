@@ -59,6 +59,39 @@ triagent
 > /init
 ```
 
+## Web Terminal (Docker)
+
+Run triagent in a browser-based terminal - no local Python installation required.
+
+### One-Liner Install (Recommended)
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/sdandey/triagent/main/start-web.ps1 | iex
+```
+
+**macOS/Linux:**
+```bash
+curl -sSL https://raw.githubusercontent.com/sdandey/triagent/main/start-web.sh | bash
+```
+
+This downloads, starts the container, and opens http://localhost:7681 in your browser.
+
+### Manual Setup
+
+```bash
+# Build and start (from cloned repo)
+docker compose -f docker-compose.web.yml up -d
+
+# Open in browser
+open http://localhost:7681
+
+# Stop
+docker compose -f docker-compose.web.yml down
+```
+
+See [docs/web-terminal.md](docs/web-terminal.md) for more details.
+
 ## Setup Wizard
 
 The `/init` command guides you through:
