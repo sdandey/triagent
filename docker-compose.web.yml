@@ -1,0 +1,68 @@
+# docker-compose.web.yml - Triagent Web Terminal
+#
+# Run triagent CLI in a browser-based terminal using ttyd.
+#
+# Usage:
+#   docker compose -f docker-compose.web.yml build
+#   docker compose -f docker-compose.web.yml up -d
+#   Open http://localhost:7681
+#
+# With authentication:
+#   TTYD_USER=admin TTYD_PASS=secret docker compose -f docker-compose.web.yml up -d
+
+services:
+  triagent-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: triagent-web
+    ports:
+      - "7681:7681"
+    volumes:
+      # Persist triagent configuration across restarts
+      - triagent-config:/home/triagent/.triagent
+      # Persist Azure CLI credentials (login once, persists across restarts)
+      - azure-config:/home/triagent/.azure
+    environment:
+      - HOME=/home/triagent
+      - TERM=xterm-256color
+      # Optional: Pass API keys via environment variables
+      # These override values in credentials.json
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_FOUNDRY_API_KEY=${ANTHROPIC_FOUNDRY_API_KEY:-}
+      - ANTHROPIC_FOUNDRY_RESOURCE=${ANTHROPIC_FOUNDRY_RESOURCE:-}
+      # Databricks credentials (if using Databricks provider)
+      - ANTHROPIC_BASE_URL=${DATABRICKS_BASE_URL:-}
+      - ANTHROPIC_AUTH_TOKEN=${DATABRICKS_TOKEN:-}
+    restart: unless-stopped
+    # Health check: ttyd responds on the port
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7681/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: With basic authentication enabled
+  # Uncomment this service and comment out triagent-web above
+  # triagent-web-auth:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.web
+  #   container_name: triagent-web
+  #   ports:
+  #     - "7681:7681"
+  #   volumes:
+  #     - triagent-config:/home/triagent/.triagent
+  #     - azure-config:/home/triagent/.azure
+  #   environment:
+  #     - HOME=/home/triagent
+  #     - TERM=xterm-256color
+  #   command: ["ttyd", "-W", "-p", "7681", "-c", "${TTYD_USER:-admin}:${TTYD_PASS:-triagent}", "triagent"]
+  #   restart: unless-stopped
+
+volumes:
+  triagent-config:
+    name: triagent-config
+  azure-config:
+    name: triagent-azure-config

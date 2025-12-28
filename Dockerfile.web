@@ -1,0 +1,73 @@
+# Dockerfile.web - Triagent with Web Terminal (ttyd)
+#
+# This Dockerfile creates a container with triagent accessible via web browser.
+# Uses ttyd (https://github.com/tsl0922/ttyd) for web-based terminal access.
+#
+# Build:   docker build -f Dockerfile.web -t triagent-web .
+# Run:     docker run -p 7681:7681 triagent-web
+# Access:  http://localhost:7681
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install ttyd (web terminal server)
+# Using the pre-built binary for x86_64 Linux
+RUN curl -L https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 \
+    -o /usr/local/bin/ttyd && chmod +x /usr/local/bin/ttyd
+
+# Install Node.js (for MCP servers)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv package manager
+RUN pip install --upgrade pip uv
+
+# Copy project files
+COPY pyproject.toml README.md ./
+COPY src/ src/
+
+# Install triagent
+RUN uv pip install --system -e .
+
+# Create non-root user with sudo access (needed for Azure CLI install via /init)
+RUN useradd -m -u 1000 -s /bin/bash triagent && \
+    echo "triagent ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    chown -R triagent:triagent /app
+
+USER triagent
+
+# Set npm global directory for non-root user (for MCP server installs)
+ENV NPM_CONFIG_PREFIX=/home/triagent/.npm-global
+ENV PATH=$PATH:/home/triagent/.npm-global/bin
+
+# Create config, npm, and azure directories
+RUN mkdir -p /home/triagent/.triagent /home/triagent/.npm-global /home/triagent/.azure
+
+# Set terminal type for proper color support
+ENV TERM=xterm-256color
+
+# Expose ttyd port
+EXPOSE 7681
+
+# Create entrypoint script to fix volume permissions
+# Docker volumes may be created as root, this ensures correct ownership
+USER root
+RUN echo '#!/bin/bash\n\
+chown -R triagent:triagent /home/triagent/.triagent /home/triagent/.azure 2>/dev/null || true\n\
+exec su triagent -c "ttyd -W -p 7681 triagent"\n\
+' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+# Start with entrypoint that fixes permissions then runs ttyd
+ENTRYPOINT ["/entrypoint.sh"]

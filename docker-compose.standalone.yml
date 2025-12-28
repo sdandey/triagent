@@ -1,0 +1,43 @@
+# docker-compose.standalone.yml - Triagent Web Terminal (Pre-built Image)
+#
+# This file uses a pre-built image from GitHub Container Registry.
+# No build required - just pull and run!
+#
+# Usage:
+#   docker compose -f docker-compose.standalone.yml up -d
+#   Open http://localhost:7681
+#
+# Stop:
+#   docker compose -f docker-compose.standalone.yml down
+
+services:
+  triagent-web:
+    image: ghcr.io/sdandey/triagent-web:latest
+    container_name: triagent-web
+    ports:
+      - "7681:7681"
+    volumes:
+      # Persist triagent configuration
+      - triagent-config:/home/triagent/.triagent
+      # Persist Azure CLI credentials
+      - azure-config:/home/triagent/.azure
+    environment:
+      - HOME=/home/triagent
+      - TERM=xterm-256color
+      # Optional: Pass API keys via environment variables
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_FOUNDRY_API_KEY=${ANTHROPIC_FOUNDRY_API_KEY:-}
+      - ANTHROPIC_FOUNDRY_RESOURCE=${ANTHROPIC_FOUNDRY_RESOURCE:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7681/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  triagent-config:
+    name: triagent-config
+  azure-config:
+    name: triagent-azure-config
