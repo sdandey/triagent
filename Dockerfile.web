@@ -34,9 +34,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Install Azure CLI
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
-# Install Azure CLI extensions (pre-installed for Docker)
+# Set shared Azure CLI extension directory (accessible by all users)
+ENV AZURE_EXTENSION_DIR=/opt/az/extensions
+
+# Install Azure CLI extensions to shared directory
 # Versions pinned in src/triagent/versions.py
-RUN az extension add --name azure-devops --version 1.0.2 -y && \
+RUN mkdir -p /opt/az/extensions && \
+    az extension add --name azure-devops --version 1.0.2 -y && \
     az extension add --name application-insights --version 2.0.0b1 -y --allow-preview true && \
     az extension add --name log-analytics --version 1.0.0b1 -y --allow-preview true
 
