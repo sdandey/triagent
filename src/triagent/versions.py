@@ -20,10 +20,11 @@ MCP_AZURE_DEVOPS_VERSION = "0.1.1"
 
 # Azure CLI Extensions
 # https://learn.microsoft.com/en-us/cli/azure/azure-cli-extensions-list
+# Note: application-insights and log-analytics are preview extensions
 AZURE_EXTENSION_VERSIONS: dict[str, str] = {
-    "azure-devops": "1.0.1",
-    "application-insights": "1.2.1",
-    "log-analytics": "0.2.3",
+    "azure-devops": "1.0.2",
+    "application-insights": "2.0.0b1",
+    "log-analytics": "1.0.0b1",
 }
 
 # Minimum Node.js version required

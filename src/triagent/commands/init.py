@@ -19,22 +19,13 @@ from triagent.mcp.setup import (
     check_azure_extension,
     check_claude_code_installed,
     check_nodejs_installed,
-    check_npm_installed,
     get_azure_account,
-    install_azure_cli,
-    install_azure_extension,
-    install_claude_code,
-    install_nodejs,
     run_azure_login,
     setup_mcp_servers,
 )
 from triagent.teams.config import TEAM_CONFIG, get_team_config
-from triagent.utils.windows import (
-    check_winget_available,
-    find_git_bash,
-    install_git_windows,
-    is_windows,
-)
+from triagent.utils.environment import get_environment_type, is_docker
+from triagent.utils.windows import find_git_bash, is_windows
 
 AZURE_CLI_INSTALL_URL = "https://docs.microsoft.com/en-us/cli/azure/install-azure-cli"
 
@@ -152,36 +143,35 @@ def init_command(console: Console, config_manager: ConfigManager) -> bool:
     """
     # Initialize the report to track successes, warnings, and failures
     report = InitReport()
+    env_type = get_environment_type()
 
     console.print()
     console.print(
         Panel(
             "[bold cyan]Welcome to Triagent CLI Setup[/bold cyan]\n\n"
-            "This wizard will help you configure Triagent for Azure DevOps automation.",
+            "This wizard will help you configure Triagent for Azure DevOps automation.\n"
+            f"[dim]Environment: {env_type}[/dim]",
             border_style="cyan",
         )
     )
     console.print()
 
-    # Step 1: Azure CLI (non-blocking - continues even if it fails)
-    _step_azure_cli(console, report)
-
-    # Step 2: Azure Authentication (non-blocking - continues even if it fails)
-    _step_azure_auth(console, config_manager, report)
-
-    # Step 3: API Provider Selection
+    # Step 1: API Provider Selection (moved first)
     credentials = _step_api_provider(console, config_manager)
 
-    # Step 4: Team Selection
+    # Step 2: Team Selection
     config = _step_team_selection(console, config_manager)
     if config is None:
         return False
 
-    # Step 5: MCP Server Setup
+    # Step 3: MCP Server Setup
     _step_mcp_setup(console, config_manager, config)
 
-    # Step 6: Claude Code CLI
-    _step_claude_code(console, report)
+    # Step 4: Azure Authentication (fail gracefully if az not found)
+    _step_azure_auth(console, config_manager, report)
+
+    # Step 5: Prerequisites Check (display-only, skip Claude Code in Docker)
+    _step_prerequisites(console, report, skip_claude_code=is_docker())
 
     # Save configuration
     config_manager.save_config(config)
@@ -194,106 +184,13 @@ def init_command(console: Console, config_manager: ConfigManager) -> bool:
     return True
 
 
-def _step_azure_cli(console: Console, report: InitReport) -> bool:
-    """Step 1: Check and auto-install Azure CLI and extensions.
-
-    This step is non-blocking - failures are logged to report but setup continues.
-
-    Args:
-        console: Rich console for output
-        report: InitReport to track successes and failures
-
-    Returns:
-        True (always continues to next step)
-    """
-    console.print("[bold]Step 1/6: Azure CLI Installation[/bold]")
-    console.print("-" * 40)
-
-    installed, version = check_azure_cli_installed()
-
-    if installed:
-        console.print(f"[green]✓[/green] Azure CLI is installed: {version}")
-        report.add_success(f"Azure CLI: {version}")
-    else:
-        console.print("[yellow]Azure CLI not detected. Installing...[/yellow]")
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            progress.add_task("Installing Azure CLI (this may take a few minutes)...")
-            success, message = install_azure_cli()
-
-        if success:
-            console.print(f"[green]✓[/green] Azure CLI installed: {message}")
-            report.add_success(f"Azure CLI installed: {message}")
-            # Verify installation
-            installed, version = check_azure_cli_installed()
-            if installed:
-                console.print(f"[green]✓[/green] Verified: {version}")
-            else:
-                console.print("[yellow]Note: You may need to restart your terminal[/yellow]")
-                report.add_warning("Azure CLI may need terminal restart to be available")
-        else:
-            console.print(f"[yellow]⚠[/yellow] Auto-install failed: {message}")
-            console.print("[dim]Will continue with other setup steps...[/dim]")
-            report.add_failure(
-                step="Step 1/6",
-                component="Azure CLI",
-                error=message,
-                manual_fix=(
-                    "pip install azure-cli\n"
-                    f"  OR\n  Download from: {AZURE_CLI_INSTALL_URL}"
-                ),
-            )
-            console.print()
-            return True  # Continue anyway
-
-    # Install all required Azure CLI extensions (non-blocking)
-    console.print()
-    console.print("[dim]Checking Azure CLI extensions...[/dim]")
-
-    for ext_name in REQUIRED_AZURE_EXTENSIONS:
-        if check_azure_extension(ext_name):
-            console.print(f"[green]✓[/green] {ext_name} extension installed")
-            report.add_success(f"Extension: {ext_name}")
-        else:
-            console.print(f"[yellow]Installing {ext_name} extension...[/yellow]")
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console,
-            ) as progress:
-                progress.add_task(f"Installing {ext_name}...")
-                if install_azure_extension(ext_name):
-                    console.print(f"[green]✓[/green] {ext_name} extension installed")
-                    report.add_success(f"Extension: {ext_name}")
-                else:
-                    console.print(f"[yellow]⚠[/yellow] {ext_name} extension failed (will continue)")
-                    report.add_failure(
-                        step="Step 1/6",
-                        component=f"Azure CLI extension: {ext_name}",
-                        error="Extension installation failed",
-                        manual_fix=(
-                            f"az extension add --name {ext_name}\n"
-                            f"  OR\n  pip install azure-cli-{ext_name}"
-                        ),
-                    )
-                    report.add_warning(
-                        f"{ext_name} extension not installed - some features may not work"
-                    )
-
-    console.print()
-    return True  # Always continue
-
-
 def _step_azure_auth(
     console: Console, config_manager: ConfigManager, report: InitReport
 ) -> bool:
-    """Step 2: Azure Authentication.
+    """Step 4: Azure Authentication.
 
     This step is non-blocking - failures are logged to report but setup continues.
+    If Azure CLI is not detected, shows manual installation instructions.
 
     Args:
         console: Rich console for output
@@ -303,8 +200,36 @@ def _step_azure_auth(
     Returns:
         True (always continues to next step)
     """
-    console.print("[bold]Step 2/6: Azure Authentication[/bold]")
+    console.print("[bold]Step 4/5: Azure Authentication[/bold]")
     console.print("-" * 40)
+    console.print()
+
+    # Check if Azure CLI is installed first
+    az_installed, _ = check_azure_cli_installed()
+    if not az_installed:
+        console.print("[yellow]Azure CLI not detected.[/yellow]")
+        console.print()
+        console.print("[bold]Please install Azure CLI and authenticate manually:[/bold]")
+        console.print()
+        console.print("1. Install Azure CLI:")
+        system = platform.system().lower()
+        if system == "windows":
+            console.print("   Download from: https://aka.ms/installazurecliwindows")
+        elif system == "darwin":
+            console.print("   brew install azure-cli")
+        else:
+            console.print("   curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash")
+        console.print()
+        console.print("2. Install required extensions:")
+        console.print("   az extension add --name azure-devops --version 1.0.1")
+        console.print("   az extension add --name application-insights --version 1.2.1")
+        console.print("   az extension add --name log-analytics --version 0.2.3")
+        console.print()
+        console.print("3. Authenticate:")
+        console.print("   az login")
+        console.print()
+        report.add_warning("Azure CLI not installed - manual authentication required")
+        return True
 
     # Check if already logged in
     account = get_azure_account()
@@ -327,7 +252,7 @@ def _step_azure_auth(
             else:
                 console.print("[yellow]⚠[/yellow] Authentication failed (will continue)")
                 report.add_failure(
-                    step="Step 2/6",
+                    step="Step 4/5",
                     component="Azure Authentication",
                     error="Failed to get account info after login",
                     manual_fix="az login",
@@ -335,7 +260,7 @@ def _step_azure_auth(
         else:
             console.print("[yellow]⚠[/yellow] Azure login failed (will continue)")
             report.add_failure(
-                step="Step 2/6",
+                step="Step 4/5",
                 component="Azure Authentication",
                 error="Azure login command failed",
                 manual_fix="az login",
@@ -356,8 +281,8 @@ def _step_api_provider(
     console: Console,
     config_manager: ConfigManager,
 ) -> TriagentCredentials | None:
-    """Step 3: API Provider selection and configuration."""
-    console.print("[bold]Step 3/6: Claude API Provider[/bold]")
+    """Step 1: API Provider selection and configuration."""
+    console.print("[bold]Step 1/5: Claude API Provider[/bold]")
     console.print("-" * 40)
 
     credentials = config_manager.load_credentials()
@@ -608,8 +533,8 @@ def _step_team_selection(
     console: Console,
     config_manager: ConfigManager,
 ) -> TriagentConfig | None:
-    """Step 4: Team Selection."""
-    console.print("[bold]Step 4/6: Team Selection[/bold]")
+    """Step 2: Team Selection."""
+    console.print("[bold]Step 2/5: Team Selection[/bold]")
     console.print("-" * 40)
 
     config = config_manager.load_config()
@@ -654,8 +579,8 @@ def _step_mcp_setup(
     config_manager: ConfigManager,
     config: TriagentConfig,
 ) -> None:
-    """Step 5: MCP Server Setup."""
-    console.print("[bold]Step 5/6: Azure DevOps MCP Server[/bold]")
+    """Step 3: MCP Server Setup."""
+    console.print("[bold]Step 3/5: Azure DevOps MCP Server[/bold]")
     console.print("-" * 40)
 
     with Progress(
@@ -674,218 +599,152 @@ def _step_mcp_setup(
     console.print()
 
 
-def _show_manual_install_instructions(console: Console, system: str) -> None:
-    """Show manual installation instructions when auto-install fails.
+def _step_prerequisites(
+    console: Console,
+    report: InitReport,
+    skip_claude_code: bool = False,
+) -> None:
+    """Step 5: Prerequisites Check (display-only, no auto-install).
+
+    This step checks for required prerequisites and displays manual
+    installation instructions if any are missing. No auto-installation.
 
     Args:
         console: Rich console for output
-        system: OS type (darwin, windows, linux)
-    """
-    console.print()
-    console.print("[bold yellow]Manual Installation Required[/bold yellow]")
-    console.print()
-
-    if system == "darwin":
-        console.print("Install Node.js on macOS:")
-        console.print("  1. Install Homebrew: https://brew.sh")
-        console.print("  2. Run: brew install node")
-        console.print()
-        console.print("Or download from: https://nodejs.org")
-
-    elif system == "windows":
-        console.print("Install Node.js on Windows:")
-        console.print("  Option 1 - winget (recommended):")
-        console.print("    winget install -e --id OpenJS.NodeJS.LTS")
-        console.print()
-        console.print("  Option 2 - Download installer:")
-        console.print("    1. Go to https://nodejs.org")
-        console.print("    2. Download Windows Installer (.msi)")
-        console.print("    3. Run installer and follow prompts")
-        console.print()
-        console.print("  Option 3 - Chocolatey:")
-        console.print("    choco install nodejs-lts")
-
-    elif system == "linux":
-        console.print("Install Node.js on Linux (Ubuntu/Debian):")
-        console.print("  curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -")
-        console.print("  sudo apt-get install -y nodejs")
-        console.print()
-        console.print("For other distributions: https://nodejs.org/en/download")
-
-    else:
-        console.print(f"Install Node.js for your OS ({system}):")
-        console.print("  https://nodejs.org/en/download")
-
-    console.print()
-    console.print("After installing Node.js, run:")
-    console.print("  npm install -g @anthropic-ai/claude-code")
-    console.print()
-    console.print("[dim]Or use legacy mode: triagent --legacy[/dim]")
-
-
-def _step_claude_code(console: Console, report: InitReport) -> bool:
-    """Step 6: Claude Code CLI Installation.
-
-    This step checks for Node.js and claude-code CLI.
-    If not installed, attempts auto-install. If that fails,
-    shows manual installation instructions.
-
-    On Windows, also checks for Git Bash which is required by Claude Code CLI.
-
-    Args:
-        console: Rich console for output
-        report: InitReport to track successes and failures
-
-    Returns:
-        True if claude-code is available or user accepted fallback to legacy
+        report: InitReport to track status
+        skip_claude_code: Skip Claude Code check (e.g., in Docker)
     """
     import os
 
-    console.print("[bold]Step 6/6: Claude Code CLI[/bold]")
+    console.print("[bold]Step 5/5: Prerequisites Check[/bold]")
     console.print("-" * 40)
+    console.print()
 
     system = platform.system().lower()
+    missing_prereqs: list[str] = []
 
-    # Windows: Check for Git Bash before proceeding (required by Claude Code CLI)
+    # Check Azure CLI
+    az_installed, az_version = check_azure_cli_installed()
+    if az_installed:
+        console.print(f"[green]✓[/green] Azure CLI: {az_version}")
+        report.add_success(f"Azure CLI: {az_version}")
+
+        # Check Azure extensions
+        for ext_name in REQUIRED_AZURE_EXTENSIONS:
+            if check_azure_extension(ext_name):
+                console.print(f"[green]✓[/green] Extension: {ext_name}")
+            else:
+                console.print(f"[yellow]○[/yellow] Extension missing: {ext_name}")
+                missing_prereqs.append(f"az extension add --name {ext_name}")
+    else:
+        console.print("[red]✗[/red] Azure CLI not found")
+        missing_prereqs.append("Azure CLI installation required")
+        report.add_warning("Azure CLI not installed")
+
+    console.print()
+
+    # Check Node.js
+    node_installed, node_version = check_nodejs_installed()
+    if node_installed:
+        console.print(f"[green]✓[/green] Node.js: {node_version}")
+        report.add_success(f"Node.js: {node_version}")
+    else:
+        console.print("[yellow]○[/yellow] Node.js not found (needed for MCP servers)")
+        missing_prereqs.append("Node.js installation required")
+        report.add_warning("Node.js not installed - MCP servers may not work")
+
+    # Check Git Bash on Windows
     if is_windows():
         bash_path = find_git_bash()
-
-        if not bash_path:
-            console.print("[yellow]Git Bash is required on Windows but was not found.[/yellow]")
-            console.print()
-
-            # Try auto-install with winget
-            if check_winget_available():
-                if confirm_prompt("Install Git for Windows automatically?", default=True):
-                    console.print()
-                    with Progress(
-                        SpinnerColumn(),
-                        TextColumn("[progress.description]{task.description}"),
-                        console=console,
-                    ) as progress:
-                        progress.add_task("Installing Git for Windows via winget...")
-                        if install_git_windows():
-                            console.print("[green]✓[/green] Git installed successfully!")
-                            report.add_success("Git for Windows installed")
-                            # Re-check for bash after installation
-                            bash_path = find_git_bash()
-                            if not bash_path:
-                                console.print(
-                                    "[yellow]Git installed but bash.exe not found "
-                                    "in expected location.[/yellow]"
-                                )
-                                console.print(
-                                    "[dim]Please restart your terminal and run /init again.[/dim]"
-                                )
-                                report.add_warning("Git installed but bash.exe not found - restart terminal")
-                                console.print()
-                                return True  # Don't fail setup
-                        else:
-                            console.print("[yellow]⚠[/yellow] Git installation failed.")
-                            report.add_failure(
-                                step="Step 6/6",
-                                component="Git for Windows",
-                                error="winget installation failed",
-                                manual_fix="Download from: https://git-scm.com/downloads/win",
-                            )
-                            console.print()
-                            return True  # Don't fail setup
-                else:
-                    report.add_warning("Git for Windows not installed - Claude Code may not work")
-                    console.print()
-                    return True  # Don't fail setup
-            else:
-                # No winget available - show manual instructions
-                console.print("[dim]winget not available for auto-install.[/dim]")
-                console.print()
-                console.print("[yellow]Please install Git for Windows manually:[/yellow]")
-                console.print("  https://git-scm.com/downloads/win")
-                report.add_failure(
-                    step="Step 6/6",
-                    component="Git for Windows",
-                    error="winget not available and Git not found",
-                    manual_fix="Download from: https://git-scm.com/downloads/win",
-                )
-                console.print()
-                return True  # Don't fail setup
-
-        # Git Bash found - set env var for this process and subprocesses
-        os.environ["CLAUDE_CODE_GIT_BASH_PATH"] = bash_path
-        console.print(f"[green]✓[/green] Git Bash found: {bash_path}")
-        report.add_success(f"Git Bash: {bash_path}")
-        console.print()
-
-    # Step 1: Check/Install Node.js
-    nodejs_installed, nodejs_version = check_nodejs_installed()
-
-    if nodejs_installed:
-        console.print(f"[green]✓[/green] Node.js is installed: {nodejs_version}")
-    else:
-        console.print("[yellow]Node.js not detected. Installing...[/yellow]")
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            progress.add_task("Installing Node.js (this may take a few minutes)...")
-            success, message = install_nodejs()
-
-        if success:
-            console.print(f"[green]✓[/green] Node.js installed: {message}")
-            # Verify npm is now available
-            if not check_npm_installed():
-                console.print("[yellow]Note: You may need to restart your terminal for npm to be available[/yellow]")
+        if bash_path:
+            os.environ["CLAUDE_CODE_GIT_BASH_PATH"] = bash_path
+            console.print(f"[green]✓[/green] Git Bash: {bash_path}")
+            report.add_success(f"Git Bash: {bash_path}")
         else:
-            console.print(f"[red]✗[/red] Auto-install failed: {message}")
-            _show_manual_install_instructions(console, system)
-            console.print()
-            return True  # Don't fail setup
+            console.print("[yellow]○[/yellow] Git Bash not found (required for Claude Code on Windows)")
+            missing_prereqs.append("Git for Windows installation required")
+            report.add_warning("Git Bash not found - Claude Code may not work on Windows")
 
-    # Step 2: Check/Install claude-code CLI
-    installed, version = check_claude_code_installed()
+    # Check Claude Code (skip in Docker)
+    if skip_claude_code:
+        console.print("[dim]○ Claude Code CLI: Skipped (Docker environment)[/dim]")
+        report.add_success("Claude Code CLI: Skipped (Docker)")
+    else:
+        cc_installed, cc_version = check_claude_code_installed()
+        if cc_installed:
+            console.print(f"[green]✓[/green] Claude Code CLI: {cc_version}")
+            report.add_success(f"Claude Code CLI: {cc_version}")
+        else:
+            console.print("[yellow]○[/yellow] Claude Code CLI not found")
+            missing_prereqs.append("npm install -g @anthropic-ai/claude-code")
+            report.add_warning("Claude Code CLI not installed - use --legacy flag")
 
-    if installed:
-        console.print(f"[green]✓[/green] Claude Code CLI is installed: {version}")
-        console.print()
-        return True
-
-    # Not installed - offer to install
-    console.print("[yellow]Claude Code CLI not detected.[/yellow]")
-    console.print()
-    console.print("[dim]Claude Code CLI is required for the SDK mode (default).[/dim]")
-    console.print("[dim]Without it, use: triagent --legacy[/dim]")
     console.print()
 
-    if confirm_prompt("Install Claude Code CLI now?", default=True):
-        console.print()
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            progress.add_task("Installing @anthropic-ai/claude-code (this may take a few minutes)...")
-            success, message = install_claude_code()
+    # Display manual installation instructions if needed
+    if missing_prereqs:
+        _show_prerequisites_instructions(console, missing_prereqs, system)
 
-        if success:
-            console.print(f"[green]✓[/green] Claude Code CLI installed: {message}")
-            console.print()
-            return True
+
+def _show_prerequisites_instructions(
+    console: Console,
+    missing: list[str],
+    system: str,
+) -> None:
+    """Display manual installation instructions for missing prerequisites.
+
+    Args:
+        console: Rich console for output
+        missing: List of missing prerequisites/commands
+        system: OS type (darwin, windows, linux)
+    """
+    console.print("[bold yellow]Missing Prerequisites[/bold yellow]")
+    console.print()
+
+    # Azure CLI instructions
+    if any("Azure CLI" in m for m in missing):
+        console.print("[bold]Azure CLI Installation:[/bold]")
+        if system == "darwin":
+            console.print("  brew install azure-cli")
+        elif system == "windows":
+            console.print("  Download from: https://aka.ms/installazurecliwindows")
         else:
-            console.print(f"[red]✗[/red] Installation failed: {message}")
-            console.print()
-            console.print("[yellow]You can install manually:[/yellow]")
-            console.print("  npm install -g @anthropic-ai/claude-code")
-            console.print()
-            console.print("[dim]Or use legacy mode: triagent --legacy[/dim]")
-            console.print()
-            return True  # Don't fail setup
-    else:
+            console.print("  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash")
         console.print()
-        console.print("[dim]Skipped. To use triagent without Claude Code CLI:[/dim]")
-        console.print("[dim]  triagent --legacy[/dim]")
+
+    # Azure extensions
+    ext_missing = [m for m in missing if m.startswith("az extension")]
+    if ext_missing:
+        console.print("[bold]Azure CLI Extensions:[/bold]")
+        for cmd in ext_missing:
+            console.print(f"  {cmd}")
         console.print()
-        return True  # Don't fail setup
+
+    # Node.js instructions
+    if any("Node.js" in m for m in missing):
+        console.print("[bold]Node.js Installation:[/bold]")
+        if system == "darwin":
+            console.print("  brew install node")
+        elif system == "windows":
+            console.print("  Download from: https://nodejs.org")
+        else:
+            console.print("  curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -")
+            console.print("  sudo apt-get install -y nodejs")
+        console.print()
+
+    # Git for Windows instructions
+    if any("Git for Windows" in m for m in missing):
+        console.print("[bold]Git for Windows Installation:[/bold]")
+        console.print("  Download from: https://git-scm.com/download/win")
+        console.print()
+
+    # Claude Code CLI instructions
+    if any("claude-code" in m for m in missing):
+        console.print("[bold]Claude Code CLI:[/bold]")
+        console.print("  npm install -g @anthropic-ai/claude-code")
+        console.print()
+        console.print("[dim]Or run triagent with --legacy flag to skip Claude Code requirement[/dim]")
+        console.print()
 
 
 def _show_completion(
