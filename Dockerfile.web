@@ -31,6 +31,19 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Azure CLI
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+
+# Set shared Azure CLI extension directory (accessible by all users)
+ENV AZURE_EXTENSION_DIR=/opt/az/extensions
+
+# Install Azure CLI extensions to shared directory
+# Versions pinned in src/triagent/versions.py
+RUN mkdir -p /opt/az/extensions && \
+    az extension add --name azure-devops --version 1.0.2 -y && \
+    az extension add --name application-insights --version 2.0.0b1 -y --allow-preview true && \
+    az extension add --name log-analytics --version 1.0.0b1 -y --allow-preview true
+
 # Install uv package manager
 RUN pip install --upgrade pip uv
 
@@ -41,7 +54,7 @@ COPY src/ src/
 # Install triagent
 RUN uv pip install --system -e .
 
-# Create non-root user with sudo access (needed for Azure CLI install via /init)
+# Create non-root user with sudo access
 RUN useradd -m -u 1000 -s /bin/bash triagent && \
     echo "triagent ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
     chown -R triagent:triagent /app
@@ -57,6 +70,9 @@ RUN mkdir -p /home/triagent/.triagent /home/triagent/.npm-global /home/triagent/
 
 # Set terminal type for proper color support
 ENV TERM=xterm-256color
+
+# Set environment variable for Docker detection
+ENV TRIAGENT_DOCKER=1
 
 # Expose ttyd port
 EXPOSE 7681

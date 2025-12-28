@@ -94,13 +94,15 @@ See [docs/web-terminal.md](docs/web-terminal.md) for more details.
 
 ## Setup Wizard
 
-The `/init` command guides you through:
+The `/init` command guides you through configuration:
 
-1. **Azure CLI Installation** - Checks and installs Azure CLI
-2. **Azure Authentication** - Browser-based Azure login
-3. **Azure Foundry API** - Configure Claude API credentials
-4. **Azure DevOps MCP Server** - Set up MCP tools
-5. **Team Selection** - Choose your team (Levvia, Omnia, Omnia Data)
+1. **Model Selection** - Choose API provider (Databricks, Azure Foundry, Anthropic)
+2. **Team Selection** - Choose team and ADO project
+3. **MCP Server Setup** - Configure Azure DevOps MCP server
+4. **Azure Authentication** - Browser-based Azure login
+5. **Prerequisites Check** - Verify required tools are installed
+
+Note: The wizard displays installation instructions but does not auto-install tools. See [Prerequisites](#prerequisites) for installation instructions.
 
 ## Slash Commands
 
@@ -154,12 +156,45 @@ pytest tests/ -v
 ruff check src/
 ```
 
-## Requirements
+## Prerequisites
 
-- Python 3.11+
-- Azure CLI
-- Azure DevOps account
-- Claude API access (via Azure AI Foundry)
+### Required
+
+- **Python 3.11+** - Core runtime
+- **Azure DevOps account** - For ADO automation
+
+### Recommended
+
+- **Azure CLI** - For Azure authentication and ADO operations
+  - macOS: `brew install azure-cli`
+  - Windows: Download from https://aka.ms/installazurecliwindows
+  - Linux: `curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash`
+
+- **Azure CLI Extensions** - Install after Azure CLI:
+  ```bash
+  az extension add --name azure-devops --version 1.0.2
+  az extension add --name application-insights --version 2.0.0b1 --allow-preview true
+  az extension add --name log-analytics --version 1.0.0b1 --allow-preview true
+  ```
+
+- **Node.js 18+** - For MCP servers
+  - macOS: `brew install node`
+  - Windows: Download from https://nodejs.org
+  - Linux: See https://deb.nodesource.com
+
+### Optional
+
+- **Claude Code CLI** - For SDK mode (default)
+  ```bash
+  npm install -g @anthropic-ai/claude-code
+  ```
+  Or use `triagent --legacy` to skip this requirement.
+
+### API Access (choose one)
+
+- Databricks Foundation Model API
+- Azure AI Foundry
+- Direct Anthropic API
 
 ## License
 

@@ -289,6 +289,85 @@ function Install-Pipx {
 }
 
 # ============================================================================
+# Azure CLI Detection and Installation
+# ============================================================================
+
+function Find-AzureCLI {
+    try {
+        $output = & az --version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            # Extract version from first line (e.g., "azure-cli                         2.64.0")
+            if ($output[0] -match "azure-cli\s+(\d+\.\d+\.\d+)") {
+                return @{ Found = $true; Version = $Matches[1] }
+            }
+            return @{ Found = $true; Version = "unknown" }
+        }
+    } catch {
+        # az not found
+    }
+    return @{ Found = $false; Version = $null }
+}
+
+function Install-AzureCLI {
+    Write-Info "Installing Azure CLI via MSI..."
+
+    # Download MSI installer directly (no winget dependency)
+    $installerUrl = "https://aka.ms/installazurecliwindows"
+    $installerPath = Join-Path $env:TEMP "AzureCLI.msi"
+
+    try {
+        Write-Info "Downloading Azure CLI installer..."
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
+
+        Write-Info "Running Azure CLI installer (this may take a few minutes)..."
+        $installArgs = @(
+            "/i",
+            $installerPath,
+            "/quiet",
+            "/norestart"
+        )
+
+        $result = Start-Process -FilePath "msiexec.exe" -ArgumentList $installArgs -Wait -PassThru
+
+        if ($result.ExitCode -eq 0) {
+            # Refresh PATH
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                        [System.Environment]::GetEnvironmentVariable("Path", "User")
+
+            # Add common Azure CLI paths to current session
+            $azureCLIPaths = @(
+                "$env:ProgramFiles\Microsoft SDKs\Azure\CLI2\wbin",
+                "${env:ProgramFiles(x86)}\Microsoft SDKs\Azure\CLI2\wbin",
+                "$env:LOCALAPPDATA\Programs\Azure CLI\wbin"
+            )
+            foreach ($path in $azureCLIPaths) {
+                if ((Test-Path $path) -and ($env:Path -notlike "*$path*")) {
+                    $env:Path = "$path;$env:Path"
+                }
+            }
+
+            $az = Find-AzureCLI
+            if ($az.Found) {
+                Write-Success "Azure CLI $($az.Version) installed"
+                return $true
+            } else {
+                Write-Warn "Azure CLI installed but may need terminal restart"
+                return $true
+            }
+        } else {
+            Write-Warn "Azure CLI installation returned exit code $($result.ExitCode)"
+            return $false
+        }
+    } catch {
+        Write-Err "Failed to install Azure CLI: $($_.Exception.Message)"
+        return $false
+    } finally {
+        Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# ============================================================================
 # Triagent Installation
 # ============================================================================
 
@@ -450,7 +529,25 @@ function Main {
     # Step 4: Install triagent
     Install-Triagent -Version $Version
 
-    # Step 5: Verify
+    # Step 5: Azure CLI
+    $az = Find-AzureCLI
+    if ($az.Found) {
+        Write-Success "Azure CLI $($az.Version) found"
+    } else {
+        if ($NonInteractive -or (Test-IsCI)) {
+            Install-AzureCLI
+        } else {
+            Write-Warn "Azure CLI not found"
+            $response = Read-Host "Install Azure CLI? [Y/n]"
+            if ($response -match "^[Yy]?$") {
+                Install-AzureCLI
+            } else {
+                Write-Info "Skipping Azure CLI. Install from: https://aka.ms/installazurecliwindows"
+            }
+        }
+    }
+
+    # Step 6: Verify
     if (-not (Test-Installation)) {
         Write-Warn "Installation complete but verification failed"
     }

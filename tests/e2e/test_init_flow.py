@@ -68,18 +68,6 @@ class TestAzureCLIInstall:
         assert isinstance(installed, bool)
         assert isinstance(version, str)
 
-    def test_install_azure_cli_returns_tuple(self):
-        """Test install_azure_cli returns proper tuple."""
-        from triagent.mcp.setup import install_azure_cli
-
-        # Note: This doesn't actually install, just tests the function signature
-        # when Azure CLI is already installed
-        result = install_azure_cli()
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert isinstance(result[0], bool)
-        assert isinstance(result[1], str)
-
     @pytest.mark.skipif(
         subprocess.run(["az", "--version"], capture_output=True).returncode != 0,
         reason="Azure CLI not installed",
@@ -166,18 +154,6 @@ class TestNodeJS:
         installed, version = check_nodejs_installed()
         assert isinstance(installed, bool)
         assert isinstance(version, str)
-
-    def test_install_nodejs_returns_tuple(self):
-        """Test install_nodejs returns proper tuple."""
-        from triagent.mcp.setup import install_nodejs
-
-        # Note: This tests the function signature
-        # If Node.js is installed, it returns (True, "Already installed: ...")
-        result = install_nodejs()
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert isinstance(result[0], bool)
-        assert isinstance(result[1], str)
 
     @pytest.mark.skipif(
         subprocess.run(["npm", "--version"], capture_output=True).returncode != 0,
