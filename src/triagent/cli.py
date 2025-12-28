@@ -513,82 +513,93 @@ async def interactive_loop_async(
         console.print("[dim]After installing Git, restart your terminal and try again.[/dim]")
         return
 
-    # Build SDK options
-    client_factory = create_sdk_client(config_manager)
-    options = client_factory._build_options()
+    # Outer loop allows restarting SDK client after /init changes credentials
+    restart_session = True
+    while restart_session:
+        restart_session = False
 
-    # Create activity tracker for visual feedback
-    config = config_manager.load_config()
-    tracker = ActivityTracker(
-        console=console,
-        verbose=config.verbose,
-        markdown_enabled=config.markdown_format,
-    )
+        # Build SDK options (inside loop to pick up new credentials after /init)
+        client_factory = create_sdk_client(config_manager)
+        options = client_factory._build_options()
 
-    # Use SDK context manager for session lifecycle
-    try:
-        async with ClaudeSDKClient(options=options) as client:
-            console.print("[dim]Connected to Claude. Type /help for commands[/dim]")
-            console.print()
-
-            while True:
-                try:
-                    # Get user input (sync input() is OK inside async)
-                    user_input = input("You: ").strip()
-                except (EOFError, KeyboardInterrupt):
-                    console.print()
-                    console.print("[dim]Goodbye![/dim]")
-                    break
-
-                if not user_input:
-                    continue
-
-                # Handle slash commands
-                if user_input.startswith("/"):
-                    command, args = parse_slash_command(user_input)
-                    should_continue = handle_slash_command(
-                        command, args, console, config_manager
-                    )
-                    if not should_continue:
-                        break
-                    continue
-
-                # Check for investigation request
-                investigation = detect_investigation_request(user_input)
-                if investigation:
-                    work_item_type, work_item_id = investigation
-                    console.print(
-                        f"[cyan]Detected investigation request for "
-                        f"{work_item_type.capitalize()} #{work_item_id}[/cyan]"
-                    )
-                    user_input = enhance_investigation_prompt(
-                        user_input, work_item_type, work_item_id
-                    )
-
-                # Send to Claude
-                console.print()
-                console.print("[bold cyan]Triagent:[/bold cyan] ", end="")
-
-                await client.query(prompt=user_input)
-
-                # Stream response
-                async for msg in client.receive_response():
-                    process_sdk_message(msg, console, tracker)
-
-                # Ensure spinner is stopped and flush remaining markdown
-                tracker.stop()
-                tracker.flush_remaining()
-                console.print()
-
-    except CLINotFoundError:
-        console.print("[red]Error: Claude CLI not installed[/red]")
-        console.print(
-            "[dim]Install with: npm install -g @anthropic-ai/claude-code[/dim]"
+        # Create activity tracker for visual feedback
+        config = config_manager.load_config()
+        tracker = ActivityTracker(
+            console=console,
+            verbose=config.verbose,
+            markdown_enabled=config.markdown_format,
         )
-    except ProcessError as e:
-        console.print(f"[red]Process error: {e}[/red]")
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+
+        # Use SDK context manager for session lifecycle
+        try:
+            async with ClaudeSDKClient(options=options) as client:
+                console.print("[dim]Connected to Claude. Type /help for commands[/dim]")
+                console.print()
+
+                while True:
+                    try:
+                        # Get user input (sync input() is OK inside async)
+                        user_input = input("You: ").strip()
+                    except (EOFError, KeyboardInterrupt):
+                        console.print()
+                        console.print("[dim]Goodbye![/dim]")
+                        break
+
+                    if not user_input:
+                        continue
+
+                    # Handle slash commands
+                    if user_input.startswith("/"):
+                        command, args = parse_slash_command(user_input)
+                        should_continue = handle_slash_command(
+                            command, args, console, config_manager
+                        )
+
+                        # Restart SDK client after /init to pick up new credentials
+                        if command == "init":
+                            restart_session = True
+                            break
+
+                        if not should_continue:
+                            break
+                        continue
+
+                    # Check for investigation request
+                    investigation = detect_investigation_request(user_input)
+                    if investigation:
+                        work_item_type, work_item_id = investigation
+                        console.print(
+                            f"[cyan]Detected investigation request for "
+                            f"{work_item_type.capitalize()} #{work_item_id}[/cyan]"
+                        )
+                        user_input = enhance_investigation_prompt(
+                            user_input, work_item_type, work_item_id
+                        )
+
+                    # Send to Claude
+                    console.print()
+                    console.print("[bold cyan]Triagent:[/bold cyan] ", end="")
+
+                    await client.query(prompt=user_input)
+
+                    # Stream response
+                    async for msg in client.receive_response():
+                        process_sdk_message(msg, console, tracker)
+
+                    # Ensure spinner is stopped and flush remaining markdown
+                    tracker.stop()
+                    tracker.flush_remaining()
+                    console.print()
+
+        except CLINotFoundError:
+            console.print("[red]Error: Claude CLI not installed[/red]")
+            console.print(
+                "[dim]Install with: npm install -g @anthropic-ai/claude-code[/dim]"
+            )
+        except ProcessError as e:
+            console.print(f"[red]Process error: {e}[/red]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
 
 
 async def async_main(config_manager: ConfigManager) -> None:
