@@ -656,6 +656,11 @@ def interactive_loop_legacy(
                 should_continue = handle_slash_command(
                     command, args, console, config_manager
                 )
+
+                # Reinitialize agent after /init to pick up new credentials
+                if command == "init":
+                    agent = create_agent_session(config_manager)
+
                 if not should_continue:
                     break
                 continue
