@@ -88,14 +88,15 @@ $script:AzureCLIPath = $null
 # ============================================================================
 
 function Initialize-Logging {
-    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $script:LogFile = Join-Path $PWD "triagent-install-$timestamp.log"
+    $fileTimestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $script:LogFile = Join-Path $PWD "triagent-install-$fileTimestamp.log"
 
     # Create log file with header
+    $headerTimestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $header = @"
 ============================================================
 Triagent Prerequisites Installer Log
-Started: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Started: $headerTimestamp
 ============================================================
 
 "@
@@ -524,9 +525,10 @@ function Install-AzureCLI {
             Update-EnvironmentPath
 
             # Add Azure CLI path to current session
+            $programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
             $azPaths = @(
                 "$env:ProgramFiles\Microsoft SDKs\Azure\CLI2\wbin",
-                "${env:ProgramFiles(x86)}\Microsoft SDKs\Azure\CLI2\wbin"
+                "$programFilesX86\Microsoft SDKs\Azure\CLI2\wbin"
             )
             foreach ($path in $azPaths) {
                 if ((Test-Path $path) -and ($env:Path -notlike "*$path*")) {
@@ -589,9 +591,10 @@ function Find-GitBashPath {
     }
 
     # Method 3: Check common installation locations
+    $programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
     $commonPaths = @(
         "$env:ProgramFiles\Git\bin\bash.exe",
-        "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
+        "$programFilesX86\Git\bin\bash.exe",
         "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe",
         "D:\Program Files\Git\bin\bash.exe"
     )
