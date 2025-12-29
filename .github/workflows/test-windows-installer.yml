@@ -241,6 +241,166 @@ jobs:
           Write-Host ""
           Write-Host "All versions match between versions.py and install.ps1" -ForegroundColor Green
 
+  test-azure-cli-detection:
+    name: Test Azure CLI Detection
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test Azure CLI is pre-installed
+        shell: pwsh
+        run: |
+          # windows-latest has Azure CLI pre-installed
+          Write-Host "Testing Azure CLI detection..." -ForegroundColor Cyan
+
+          # Test az command exists
+          $azCmd = Get-Command az -ErrorAction SilentlyContinue
+          if ($azCmd) {
+            Write-Host "Azure CLI found at: $($azCmd.Source)" -ForegroundColor Green
+
+            # Get version using same regex as install.ps1
+            $output = & az --version 2>&1
+            if ($output[0] -match "azure-cli\s+(\d+\.\d+\.\d+)") {
+              Write-Host "Azure CLI Version: $($Matches[1])" -ForegroundColor Green
+            } else {
+              Write-Host "Could not parse version from output" -ForegroundColor Yellow
+              Write-Host "Output: $($output[0])"
+            }
+          } else {
+            Write-Host "Azure CLI not found in PATH" -ForegroundColor Red
+            exit 1
+          }
+
+  test-azure-cli-version-check:
+    name: Test Azure CLI Version Comparison
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test version comparison logic
+        shell: pwsh
+        run: |
+          # Test the version comparison function (same logic as install.ps1)
+          function Test-AzureCLIVersionOutdated {
+            param([string]$CurrentVersion, [string]$RequiredVersion)
+            try {
+              $current = [version]$CurrentVersion
+              $required = [version]$RequiredVersion
+              return $current -lt $required
+            } catch {
+              return $false
+            }
+          }
+
+          # Test cases
+          $tests = @(
+            @{ Current = "2.66.0"; Required = "2.67.0"; Expected = $true; Desc = "Older version" },
+            @{ Current = "2.67.0"; Required = "2.67.0"; Expected = $false; Desc = "Same version" },
+            @{ Current = "2.70.0"; Required = "2.67.0"; Expected = $false; Desc = "Newer version" },
+            @{ Current = "2.67.1"; Required = "2.67.0"; Expected = $false; Desc = "Patch newer" },
+            @{ Current = "3.0.0"; Required = "2.67.0"; Expected = $false; Desc = "Major newer" }
+          )
+
+          Write-Host "Testing version comparison logic..." -ForegroundColor Cyan
+          $failed = 0
+          foreach ($test in $tests) {
+            $result = Test-AzureCLIVersionOutdated -CurrentVersion $test.Current -RequiredVersion $test.Required
+            if ($result -eq $test.Expected) {
+              Write-Host "PASS: $($test.Desc) ($($test.Current) vs $($test.Required))" -ForegroundColor Green
+            } else {
+              Write-Host "FAIL: $($test.Desc) - Expected $($test.Expected), Got $result" -ForegroundColor Red
+              $failed++
+            }
+          }
+
+          if ($failed -gt 0) {
+            Write-Host ""
+            Write-Host "$failed test(s) failed" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host ""
+          Write-Host "All version comparison tests passed" -ForegroundColor Green
+
+  test-azure-cli-registry:
+    name: Test Azure CLI Registry Detection
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test Azure CLI registry lookup
+        shell: pwsh
+        run: |
+          Write-Host "Testing Azure CLI registry detection..." -ForegroundColor Cyan
+
+          # Same logic as Uninstall-AzureCLI detection in install.ps1
+          $uninstallKey = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like "*Azure CLI*" }
+
+          if ($uninstallKey) {
+            Write-Host "Azure CLI found in registry:" -ForegroundColor Green
+            Write-Host "  DisplayName: $($uninstallKey.DisplayName)"
+            Write-Host "  Version: $($uninstallKey.DisplayVersion)"
+            Write-Host "  UninstallString: $($uninstallKey.UninstallString)"
+            Write-Host "  ProductCode: $($uninstallKey.PSChildName)"
+
+            # Verify uninstall string contains msiexec (as expected by install.ps1)
+            if ($uninstallKey.UninstallString -match "msiexec") {
+              Write-Host "  MSI uninstall: Supported" -ForegroundColor Green
+            } else {
+              Write-Host "  MSI uninstall: Not detected (different install method)" -ForegroundColor Yellow
+            }
+          } else {
+            Write-Host "Azure CLI not found in registry" -ForegroundColor Yellow
+            Write-Host "Note: This may indicate a different installation method (winget, chocolatey, etc.)"
+          }
+
+  test-azure-cli-upgrade-logic:
+    name: Test Azure CLI Upgrade Logic
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test upgrade decision logic
+        shell: pwsh
+        run: |
+          # Read required version from versions.py (same as install.ps1)
+          $versionsContent = Get-Content src/triagent/versions.py -Raw
+          $azMatch = [regex]::Match($versionsContent, 'AZURE_CLI_VERSION\s*=\s*"([^"]+)"')
+          $requiredVersion = $azMatch.Groups[1].Value
+
+          Write-Host "Testing upgrade decision logic..." -ForegroundColor Cyan
+          Write-Host "Required Version (from versions.py): $requiredVersion" -ForegroundColor Cyan
+
+          # Get current installed version
+          $output = & az --version 2>&1
+          $currentVersion = "unknown"
+          if ($output[0] -match "azure-cli\s+(\d+\.\d+\.\d+)") {
+            $currentVersion = $Matches[1]
+          }
+
+          Write-Host "Current Version (installed): $currentVersion" -ForegroundColor Cyan
+
+          # Check if upgrade needed (same logic as install.ps1)
+          try {
+            $current = [version]$currentVersion
+            $required = [version]$requiredVersion
+
+            if ($current -lt $required) {
+              Write-Host ""
+              Write-Host "Decision: UPGRADE NEEDED" -ForegroundColor Yellow
+              Write-Host "  Reason: Current version ($currentVersion) < Required ($requiredVersion)"
+            } else {
+              Write-Host ""
+              Write-Host "Decision: NO UPGRADE NEEDED" -ForegroundColor Green
+              Write-Host "  Reason: Current version ($currentVersion) >= Required ($requiredVersion)"
+            }
+          } catch {
+            Write-Host ""
+            Write-Host "Decision: COULD NOT DETERMINE" -ForegroundColor Red
+            Write-Host "  Error: $($_.Exception.Message)"
+            exit 1
+          }
+
   test-documentation:
     name: Verify Documentation
     runs-on: ubuntu-latest
