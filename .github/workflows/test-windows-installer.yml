@@ -30,7 +30,10 @@ jobs:
           )
           if ($errors) {
             Write-Host "PowerShell syntax errors found:" -ForegroundColor Red
-            $errors | ForEach-Object { Write-Host $_.Message -ForegroundColor Red }
+            foreach ($err in $errors) {
+              Write-Host "Line $($err.Extent.StartLineNumber): $($err.Message)" -ForegroundColor Red
+              Write-Host "  Code: $($err.Extent.Text)" -ForegroundColor Yellow
+            }
             exit 1
           }
           Write-Host "PowerShell syntax validation passed" -ForegroundColor Green
@@ -108,9 +111,10 @@ jobs:
           }
 
           # Method 3: Common paths
+          $programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
           $commonPaths = @(
             "$env:ProgramFiles\Git\bin\bash.exe",
-            "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
+            "$programFilesX86\Git\bin\bash.exe",
             "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
           )
           Write-Host "Method 3 (Common paths):"
