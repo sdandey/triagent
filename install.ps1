@@ -162,12 +162,12 @@ function Write-Err {
 function Write-Step {
     param([string]$StepNumber, [string]$Message)
     Write-Host ""
-    Write-Log "=== Step $StepNumber: $Message ==="
+    Write-Log "=== Step ${StepNumber}: $Message ==="
     if ($script:UseColor) {
-        Write-Host "=== Step $StepNumber: " -NoNewline -ForegroundColor Cyan
+        Write-Host "=== Step ${StepNumber}: " -NoNewline -ForegroundColor Cyan
         Write-Host "$Message ===" -ForegroundColor White
     } else {
-        Write-Host "=== Step $StepNumber: $Message ==="
+        Write-Host "=== Step ${StepNumber}: $Message ==="
     }
 }
 
