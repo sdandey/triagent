@@ -1,0 +1,234 @@
+name: Test Windows Installer
+
+on:
+  push:
+    branches: [main, feature/powershell-installer-v2]
+    paths:
+      - 'install.ps1'
+      - '.github/workflows/test-windows-installer.yml'
+      - 'src/triagent/versions.py'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'install.ps1'
+
+jobs:
+  validate-syntax:
+    name: Validate PowerShell Syntax
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD\install.ps1",
+            [ref]$null,
+            [ref]$errors
+          )
+          if ($errors) {
+            Write-Host "PowerShell syntax errors found:" -ForegroundColor Red
+            $errors | ForEach-Object { Write-Host $_.Message -ForegroundColor Red }
+            exit 1
+          }
+          Write-Host "PowerShell syntax validation passed" -ForegroundColor Green
+
+  test-admin-check:
+    name: Test Admin Check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test admin check (should fail without admin)
+        shell: pwsh
+        run: |
+          # GitHub Actions runners don't run as Administrator
+          # This should trigger the admin check and exit gracefully
+          $output = .\install.ps1 -NonInteractive 2>&1 | Out-String
+          if ($output -match "Administrator") {
+            Write-Host "Admin check is working correctly" -ForegroundColor Green
+            Write-Host "Output contained expected admin message"
+          } else {
+            Write-Host "Warning: Admin check may not be working as expected" -ForegroundColor Yellow
+            Write-Host "Output: $output"
+          }
+        continue-on-error: true
+
+  test-git-bash-detection:
+    name: Test Git Bash Detection
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test Git Bash path detection logic
+        shell: pwsh
+        run: |
+          # windows-latest has Git pre-installed
+          # Test the same detection logic used in install.ps1
+
+          Write-Host "Testing Git Bash detection methods..." -ForegroundColor Cyan
+
+          # Method 1: Check if git is in PATH
+          $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+          if ($gitCmd) {
+            $gitDir = Split-Path (Split-Path $gitCmd.Source -Parent) -Parent
+            $bashPath = Join-Path $gitDir "bin\bash.exe"
+            Write-Host "Method 1 (PATH): Git found at $($gitCmd.Source)"
+            Write-Host "  Expected bash.exe at: $bashPath"
+            if (Test-Path $bashPath) {
+              Write-Host "  Result: FOUND" -ForegroundColor Green
+            } else {
+              Write-Host "  Result: NOT FOUND at expected location" -ForegroundColor Yellow
+            }
+          } else {
+            Write-Host "Method 1 (PATH): Git not in PATH" -ForegroundColor Yellow
+          }
+
+          # Method 2: Check registry
+          $regPaths = @(
+            "HKLM:\SOFTWARE\GitForWindows",
+            "HKCU:\SOFTWARE\GitForWindows",
+            "HKLM:\SOFTWARE\WOW6432Node\GitForWindows"
+          )
+          foreach ($regPath in $regPaths) {
+            try {
+              $installPath = (Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue).InstallPath
+              if ($installPath) {
+                $bashPath = Join-Path $installPath "bin\bash.exe"
+                Write-Host "Method 2 (Registry): Found at $regPath"
+                Write-Host "  Install path: $installPath"
+                Write-Host "  Expected bash.exe at: $bashPath"
+                if (Test-Path $bashPath) {
+                  Write-Host "  Result: FOUND" -ForegroundColor Green
+                }
+              }
+            } catch { }
+          }
+
+          # Method 3: Common paths
+          $commonPaths = @(
+            "$env:ProgramFiles\Git\bin\bash.exe",
+            "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
+            "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
+          )
+          Write-Host "Method 3 (Common paths):"
+          foreach ($path in $commonPaths) {
+            if (Test-Path $path) {
+              Write-Host "  FOUND: $path" -ForegroundColor Green
+            }
+          }
+
+  verify-versions:
+    name: Verify Pinned Versions
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check versions.py has required constants
+        shell: pwsh
+        run: |
+          $content = Get-Content src/triagent/versions.py -Raw
+
+          $required = @(
+            "PYTHON_VERSION",
+            "AZURE_CLI_VERSION",
+            "GIT_FOR_WINDOWS_VERSION"
+          )
+
+          $missing = @()
+          foreach ($const in $required) {
+            if ($content -match $const) {
+              Write-Host "Found: $const" -ForegroundColor Green
+            } else {
+              Write-Host "Missing: $const" -ForegroundColor Red
+              $missing += $const
+            }
+          }
+
+          if ($missing.Count -gt 0) {
+            Write-Host ""
+            Write-Host "Missing constants in versions.py: $($missing -join ', ')" -ForegroundColor Red
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "All required version constants found" -ForegroundColor Green
+
+      - name: Verify install.ps1 versions match versions.py
+        shell: pwsh
+        run: |
+          # Extract versions from versions.py
+          $versionsContent = Get-Content src/triagent/versions.py -Raw
+
+          $pyMatch = [regex]::Match($versionsContent, 'PYTHON_VERSION\s*=\s*"([^"]+)"')
+          $azMatch = [regex]::Match($versionsContent, 'AZURE_CLI_VERSION\s*=\s*"([^"]+)"')
+          $gitMatch = [regex]::Match($versionsContent, 'GIT_FOR_WINDOWS_VERSION\s*=\s*"([^"]+)"')
+
+          $pyVersion = $pyMatch.Groups[1].Value
+          $azVersion = $azMatch.Groups[1].Value
+          $gitVersion = $gitMatch.Groups[1].Value
+
+          Write-Host "Versions from versions.py:" -ForegroundColor Cyan
+          Write-Host "  Python: $pyVersion"
+          Write-Host "  Azure CLI: $azVersion"
+          Write-Host "  Git: $gitVersion"
+
+          # Extract versions from install.ps1
+          $installContent = Get-Content install.ps1 -Raw
+
+          $ps1PyMatch = [regex]::Match($installContent, '\$script:PythonVersion\s*=\s*"([^"]+)"')
+          $ps1AzMatch = [regex]::Match($installContent, '\$script:AzureCLIVersion\s*=\s*"([^"]+)"')
+          $ps1GitMatch = [regex]::Match($installContent, '\$script:GitVersion\s*=\s*"([^"]+)"')
+
+          Write-Host ""
+          Write-Host "Versions from install.ps1:" -ForegroundColor Cyan
+          Write-Host "  Python: $($ps1PyMatch.Groups[1].Value)"
+          Write-Host "  Azure CLI: $($ps1AzMatch.Groups[1].Value)"
+          Write-Host "  Git: $($ps1GitMatch.Groups[1].Value)"
+
+          # Compare
+          $errors = @()
+          if ($ps1PyMatch.Groups[1].Value -ne $pyVersion) {
+            $errors += "Python version mismatch"
+          }
+          if ($ps1AzMatch.Groups[1].Value -ne $azVersion) {
+            $errors += "Azure CLI version mismatch"
+          }
+          if ($ps1GitMatch.Groups[1].Value -ne $gitVersion) {
+            $errors += "Git version mismatch"
+          }
+
+          if ($errors.Count -gt 0) {
+            Write-Host ""
+            Write-Host "Version mismatches found:" -ForegroundColor Red
+            $errors | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "All versions match between versions.py and install.ps1" -ForegroundColor Green
+
+  test-documentation:
+    name: Verify Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check documentation exists
+        run: |
+          if [ -f "docs/windows-installation.md" ]; then
+            echo "Windows installation documentation found"
+          else
+            echo "Missing: docs/windows-installation.md"
+            exit 1
+          fi
+
+      - name: Check README references docs
+        run: |
+          if grep -q "windows-installation.md" README.md; then
+            echo "README references windows installation docs"
+          else
+            echo "Warning: README should reference docs/windows-installation.md"
+          fi

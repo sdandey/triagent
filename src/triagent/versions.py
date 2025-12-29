@@ -29,3 +29,9 @@ AZURE_EXTENSION_VERSIONS: dict[str, str] = {
 
 # Minimum Node.js version required
 MIN_NODEJS_VERSION = "18.0.0"
+
+# Windows Installer Versions
+# Used by install.ps1 for consistent cross-environment installations
+PYTHON_VERSION = "3.12.8"
+AZURE_CLI_VERSION = "2.67.0"
+GIT_FOR_WINDOWS_VERSION = "2.47.1"
