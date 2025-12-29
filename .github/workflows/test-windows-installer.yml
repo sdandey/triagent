@@ -13,15 +13,16 @@ on:
       - 'install.ps1'
 
 jobs:
-  validate-syntax:
-    name: Validate PowerShell Syntax
+  validate-syntax-pwsh:
+    name: Validate PowerShell 7.x Syntax
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate PowerShell syntax
+      - name: Validate PowerShell 7.x syntax
         shell: pwsh
         run: |
+          Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
           $errors = $null
           $null = [System.Management.Automation.Language.Parser]::ParseFile(
             "$PWD\install.ps1",
@@ -36,7 +37,33 @@ jobs:
             }
             exit 1
           }
-          Write-Host "PowerShell syntax validation passed" -ForegroundColor Green
+          Write-Host "PowerShell 7.x syntax validation passed" -ForegroundColor Green
+
+  validate-syntax-ps51:
+    name: Validate PowerShell 5.1 Syntax
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate PowerShell 5.1 syntax
+        shell: powershell
+        run: |
+          Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD\install.ps1",
+            [ref]$null,
+            [ref]$errors
+          )
+          if ($errors) {
+            Write-Host "PowerShell syntax errors found:" -ForegroundColor Red
+            foreach ($err in $errors) {
+              Write-Host "Line $($err.Extent.StartLineNumber): $($err.Message)" -ForegroundColor Red
+              Write-Host "  Code: $($err.Extent.Text)" -ForegroundColor Yellow
+            }
+            exit 1
+          }
+          Write-Host "PowerShell 5.1 syntax validation passed" -ForegroundColor Green
 
   test-admin-check:
     name: Test Admin Check
