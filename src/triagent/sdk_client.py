@@ -106,6 +106,10 @@ class TriagentSDKClient:
     def _get_allowed_tools(self) -> list[str]:
         """Get list of allowed tools including MCP tools.
 
+        NOTE: We explicitly list MCP tools instead of using wildcards.
+        Wildcards like 'mcp__azure-devops__*' bypass the can_use_tool callback,
+        preventing our permission handler from prompting for write confirmations.
+
         Returns:
             List of tool names allowed for this session
         """
@@ -119,12 +123,49 @@ class TriagentSDKClient:
             "Grep",
             "WebFetch",
             "WebSearch",
-            # In-process triagent MCP tools
+            # In-process triagent MCP tools (read-only)
             "mcp__triagent__get_team_config",
             "mcp__triagent__generate_kusto_query",
             "mcp__triagent__list_telemetry_tables",
-            # Azure DevOps MCP tools - allow all
-            "mcp__azure-devops__*",
+            # Azure DevOps MCP tools - read operations (auto-approved in permissions.py)
+            "mcp__azure-devops__get_me",
+            "mcp__azure-devops__list_organizations",
+            "mcp__azure-devops__list_projects",
+            "mcp__azure-devops__get_project",
+            "mcp__azure-devops__get_project_details",
+            "mcp__azure-devops__list_repositories",
+            "mcp__azure-devops__get_repository",
+            "mcp__azure-devops__get_repository_details",
+            "mcp__azure-devops__get_file_content",
+            "mcp__azure-devops__get_repository_tree",
+            "mcp__azure-devops__get_work_item",
+            "mcp__azure-devops__list_work_items",
+            "mcp__azure-devops__search_code",
+            "mcp__azure-devops__search_wiki",
+            "mcp__azure-devops__search_work_items",
+            "mcp__azure-devops__list_pipelines",
+            "mcp__azure-devops__get_pipeline",
+            "mcp__azure-devops__list_pipeline_runs",
+            "mcp__azure-devops__get_pipeline_run",
+            "mcp__azure-devops__download_pipeline_artifact",
+            "mcp__azure-devops__pipeline_timeline",
+            "mcp__azure-devops__get_pipeline_log",
+            "mcp__azure-devops__get_wikis",
+            "mcp__azure-devops__get_wiki_page",
+            "mcp__azure-devops__list_pull_requests",
+            "mcp__azure-devops__get_pull_request_comments",
+            "mcp__azure-devops__get_pull_request_changes",
+            "mcp__azure-devops__get_pull_request_checks",
+            # Azure DevOps MCP tools - write operations (require confirmation via can_use_tool)
+            "mcp__azure-devops__create_work_item",
+            "mcp__azure-devops__update_work_item",
+            "mcp__azure-devops__manage_work_item_link",
+            "mcp__azure-devops__create_pull_request",
+            "mcp__azure-devops__update_pull_request",
+            "mcp__azure-devops__add_pull_request_comment",
+            "mcp__azure-devops__create_branch",
+            "mcp__azure-devops__create_commit",
+            "mcp__azure-devops__trigger_pipeline",
         ]
 
     def _build_options(self) -> ClaudeAgentOptions:
@@ -157,7 +198,8 @@ class TriagentSDKClient:
 
         return ClaudeAgentOptions(
             system_prompt=self.system_prompt,
-            permission_mode="default",
+            # permission_mode is NOT set - let SDK handle with can_use_tool callback
+            # When can_use_tool is set, SDK auto-configures permission_prompt_tool_name="stdio"
             can_use_tool=self._permission_handler.can_use_tool if self._permission_handler else None,
             cwd=str(self.working_dir) if self.working_dir else None,
             env=env,

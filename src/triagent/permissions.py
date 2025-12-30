@@ -10,7 +10,9 @@ operations.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import sys
 from typing import Any
 
 from claude_agent_sdk.types import (
@@ -21,6 +23,8 @@ from claude_agent_sdk.types import (
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+
+from triagent.session_logger import log_permission_decision
 
 # Tools that are always auto-approved (read-only)
 READ_ONLY_TOOLS = [
@@ -167,6 +171,12 @@ class TriagentPermissionHandler:
         self.console = console
         self.auto_approve = auto_approve
 
+    async def _async_input(self, prompt: str = "") -> str:
+        """Non-blocking input that works with asyncio event loop."""
+        # Flush stdout to ensure prompt is visible before input
+        sys.stdout.flush()
+        return await asyncio.get_event_loop().run_in_executor(None, input, prompt)
+
     async def can_use_tool(
         self,
         tool_name: str,
@@ -302,10 +312,12 @@ class TriagentPermissionHandler:
         self.console.print(f"[yellow]Confirm:[/yellow] {description}")
 
         while True:
-            response = input("[y]es / [n]o: ").strip().lower()
+            response = (await self._async_input("[y]es / [n]o: ")).strip().lower()
             if response in ("y", "yes"):
+                log_permission_decision(tool_name, "allow", "User approved")
                 return PermissionResultAllow(updated_input=input_data)
             elif response in ("n", "no"):
+                log_permission_decision(tool_name, "deny", "User denied")
                 return PermissionResultDeny(message="Operation cancelled by user")
             else:
                 self.console.print("[dim]Please enter 'y' or 'n'[/dim]")
@@ -349,10 +361,12 @@ class TriagentPermissionHandler:
         )
 
         while True:
-            response = input("[a]pprove / [d]eny / [v]iew full details: ").strip().lower()
+            response = (await self._async_input("[a]pprove / [d]eny / [v]iew full details: ")).strip().lower()
             if response in ("a", "approve"):
+                log_permission_decision(tool_name, "allow", "User approved")
                 return PermissionResultAllow(updated_input=input_data)
             elif response in ("d", "deny"):
+                log_permission_decision(tool_name, "deny", "User denied")
                 return PermissionResultDeny(message="Operation cancelled by user")
             elif response in ("v", "view"):
                 # Show full JSON
@@ -489,6 +503,12 @@ class TriagentPermissionHandler:
         Returns:
             PermissionResultAllow with answers in updated_input
         """
+        # Pause spinner and flush buffered text before showing questions
+        from triagent.cli import flush_buffer, pause_spinner
+
+        pause_spinner()
+        flush_buffer()
+
         questions = input_data.get("questions", [])
         answers: dict[str, str] = {}
 
@@ -516,7 +536,7 @@ class TriagentPermissionHandler:
             if multi_select:
                 self.console.print("[dim]Enter numbers separated by commas (e.g., 1,3)[/dim]")
                 while True:
-                    choice = input("Select: ").strip()
+                    choice = (await self._async_input("Select: ")).strip()
                     try:
                         selections = [int(x.strip()) for x in choice.split(",")]
                         if all(1 <= s <= len(options) for s in selections):
@@ -529,7 +549,7 @@ class TriagentPermissionHandler:
                         self.console.print("[red]Please enter valid numbers separated by commas[/red]")
             else:
                 while True:
-                    choice = input("Select (number): ").strip()
+                    choice = (await self._async_input("Select (number): ")).strip()
                     if choice.isdigit() and 1 <= int(choice) <= len(options):
                         answers[question_text] = options[int(choice) - 1]["label"]
                         break

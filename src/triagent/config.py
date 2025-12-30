@@ -32,6 +32,9 @@ class TriagentConfig:
     auto_approve_writes: bool = False  # If True, skip write operation confirmations
     # Output formatting
     markdown_format: bool = False  # If True, render markdown (buffers); False streams plain text
+    # Session logging settings
+    session_logging: bool = True  # Enable/disable session logging
+    session_log_level: str = "INFO"  # Log level: DEBUG, INFO, WARNING, ERROR
 
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
@@ -45,6 +48,8 @@ class TriagentConfig:
             "ssl_cert_file": self.ssl_cert_file,
             "auto_approve_writes": self.auto_approve_writes,
             "markdown_format": self.markdown_format,
+            "session_logging": self.session_logging,
+            "session_log_level": self.session_log_level,
         }
 
     @classmethod
@@ -60,6 +65,8 @@ class TriagentConfig:
             ssl_cert_file=data.get("ssl_cert_file"),
             auto_approve_writes=data.get("auto_approve_writes", False),
             markdown_format=data.get("markdown_format", False),
+            session_logging=data.get("session_logging", True),
+            session_log_level=data.get("session_log_level", "INFO"),
         )
 
 
