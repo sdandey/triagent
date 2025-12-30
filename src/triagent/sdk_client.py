@@ -10,16 +10,18 @@ provides the configuration/options builder.
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions
+from rich.console import Console
 
 from triagent.auth import get_foundry_env
 from triagent.config import ConfigManager
 from triagent.hooks import get_triagent_hooks
 from triagent.mcp.tools import create_triagent_mcp_server
+from triagent.permissions import TriagentPermissionHandler
 from triagent.prompts.system import get_system_prompt
 from triagent.utils.windows import get_git_bash_env, is_windows
 from triagent.versions import MCP_AZURE_DEVOPS_VERSION
@@ -31,12 +33,13 @@ class TriagentSDKClient:
 
     Builds ClaudeAgentOptions with:
     - Security hooks (PreToolUse, PostToolUse)
+    - Permission handler for write confirmations
     - In-process MCP tools (triagent-specific)
     - External MCP servers (Azure DevOps)
     - Azure Foundry authentication
 
     Usage:
-        client = create_sdk_client(config_manager)
+        client = create_sdk_client(config_manager, console)
         options = client._build_options()
         async with ClaudeSDKClient(options=options) as sdk_client:
             await sdk_client.query(prompt)
@@ -46,12 +49,23 @@ class TriagentSDKClient:
 
     config_manager: ConfigManager
     team: str
+    console: Console
     working_dir: Path | None = None
+    _permission_handler: TriagentPermissionHandler | None = field(
+        default=None, repr=False, init=False
+    )
 
     def __post_init__(self) -> None:
         """Initialize the client."""
         if self.working_dir is None:
             self.working_dir = Path.cwd()
+
+        # Initialize permission handler
+        config = self.config_manager.load_config()
+        self._permission_handler = TriagentPermissionHandler(
+            console=self.console,
+            auto_approve=config.auto_approve_writes,
+        )
 
     @property
     def system_prompt(self) -> str:
@@ -92,6 +106,10 @@ class TriagentSDKClient:
     def _get_allowed_tools(self) -> list[str]:
         """Get list of allowed tools including MCP tools.
 
+        NOTE: We explicitly list MCP tools instead of using wildcards.
+        Wildcards like 'mcp__azure-devops__*' bypass the can_use_tool callback,
+        preventing our permission handler from prompting for write confirmations.
+
         Returns:
             List of tool names allowed for this session
         """
@@ -105,12 +123,49 @@ class TriagentSDKClient:
             "Grep",
             "WebFetch",
             "WebSearch",
-            # In-process triagent MCP tools
+            # In-process triagent MCP tools (read-only)
             "mcp__triagent__get_team_config",
             "mcp__triagent__generate_kusto_query",
             "mcp__triagent__list_telemetry_tables",
-            # Azure DevOps MCP tools - allow all
-            "mcp__azure-devops__*",
+            # Azure DevOps MCP tools - read operations (auto-approved in permissions.py)
+            "mcp__azure-devops__get_me",
+            "mcp__azure-devops__list_organizations",
+            "mcp__azure-devops__list_projects",
+            "mcp__azure-devops__get_project",
+            "mcp__azure-devops__get_project_details",
+            "mcp__azure-devops__list_repositories",
+            "mcp__azure-devops__get_repository",
+            "mcp__azure-devops__get_repository_details",
+            "mcp__azure-devops__get_file_content",
+            "mcp__azure-devops__get_repository_tree",
+            "mcp__azure-devops__get_work_item",
+            "mcp__azure-devops__list_work_items",
+            "mcp__azure-devops__search_code",
+            "mcp__azure-devops__search_wiki",
+            "mcp__azure-devops__search_work_items",
+            "mcp__azure-devops__list_pipelines",
+            "mcp__azure-devops__get_pipeline",
+            "mcp__azure-devops__list_pipeline_runs",
+            "mcp__azure-devops__get_pipeline_run",
+            "mcp__azure-devops__download_pipeline_artifact",
+            "mcp__azure-devops__pipeline_timeline",
+            "mcp__azure-devops__get_pipeline_log",
+            "mcp__azure-devops__get_wikis",
+            "mcp__azure-devops__get_wiki_page",
+            "mcp__azure-devops__list_pull_requests",
+            "mcp__azure-devops__get_pull_request_comments",
+            "mcp__azure-devops__get_pull_request_changes",
+            "mcp__azure-devops__get_pull_request_checks",
+            # Azure DevOps MCP tools - write operations (require confirmation via can_use_tool)
+            "mcp__azure-devops__create_work_item",
+            "mcp__azure-devops__update_work_item",
+            "mcp__azure-devops__manage_work_item_link",
+            "mcp__azure-devops__create_pull_request",
+            "mcp__azure-devops__update_pull_request",
+            "mcp__azure-devops__add_pull_request_comment",
+            "mcp__azure-devops__create_branch",
+            "mcp__azure-devops__create_commit",
+            "mcp__azure-devops__trigger_pipeline",
         ]
 
     def _build_options(self) -> ClaudeAgentOptions:
@@ -143,7 +198,9 @@ class TriagentSDKClient:
 
         return ClaudeAgentOptions(
             system_prompt=self.system_prompt,
-            permission_mode="bypassPermissions",
+            # permission_mode is NOT set - let SDK handle with can_use_tool callback
+            # When can_use_tool is set, SDK auto-configures permission_prompt_tool_name="stdio"
+            can_use_tool=self._permission_handler.can_use_tool if self._permission_handler else None,
             cwd=str(self.working_dir) if self.working_dir else None,
             env=env,
             model=model,
@@ -154,11 +211,15 @@ class TriagentSDKClient:
         )
 
 
-def create_sdk_client(config_manager: ConfigManager) -> TriagentSDKClient:
+def create_sdk_client(
+    config_manager: ConfigManager,
+    console: Console,
+) -> TriagentSDKClient:
     """Create a new SDK client configuration builder.
 
     Args:
         config_manager: Configuration manager instance
+        console: Rich console for user interaction
 
     Returns:
         Configured TriagentSDKClient for building options
@@ -168,5 +229,6 @@ def create_sdk_client(config_manager: ConfigManager) -> TriagentSDKClient:
     return TriagentSDKClient(
         config_manager=config_manager,
         team=config.team,
+        console=console,
         working_dir=Path.cwd(),
     )

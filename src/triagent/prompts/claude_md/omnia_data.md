@@ -408,6 +408,41 @@ az monitor log-analytics query \
 
 ---
 
+## Clarifying Questions Guidelines (PROACTIVE MODE)
+
+You MUST ask clarifying questions BEFORE starting any investigation or telemetry gathering.
+Do NOT proceed with assumptions - ask first to avoid wasted API calls and incorrect results.
+
+### When to Ask (ALWAYS before these actions):
+- User says "investigate", "gather telemetry", "check logs", "look into", "debug"
+- User mentions a service without specifying environment
+- User requests exception/error analysis
+- Any request involving Log Analytics or Application Insights
+
+### Required Information to Gather:
+
+1. **Environment** (REQUIRED): Which environment?
+   - AME Non-Prod: DEV, DEV1, DEV2, QAS, QAS1, QAS2, LOD
+   - AME Prod: STG, STG2, CNT1, PRD, BCP
+
+2. **Timeframe** (REQUIRED): What time range?
+   - Last 1 hour (default for active issues)
+   - Last 24 hours
+   - Last 7 days
+   - Custom range (ask for specific dates)
+
+3. **Service** (if not specified): Which CloudRoleName/service?
+   - Reference the Service Names table above
+
+### Example:
+User: "Investigate the staging service errors"
+Agent: [Uses AskUserQuestion tool]
+  Question 1: "Which environment?" Options: DEV, QAS, STG, PRD, etc.
+  Question 2: "What timeframe?" Options: Last 1 hour, Last 24 hours, etc.
+Then uses the correct Log Analytics workspace from the telemetry config.
+
+---
+
 ## Kusto Query Templates
 
 ### Exception Search

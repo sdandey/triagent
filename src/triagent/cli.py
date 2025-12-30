@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import random
 import re
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from time import time
 from typing import Any
@@ -24,6 +25,11 @@ from triagent.commands.team import team_command
 from triagent.commands.team_report import team_report_command
 from triagent.config import ConfigManager, get_config_manager
 from triagent.sdk_client import create_sdk_client
+from triagent.session_logger import (
+    create_session_logger,
+    log_session_end,
+    log_session_start,
+)
 from triagent.teams.config import get_team_config
 from triagent.utils.windows import find_git_bash, is_windows
 from triagent.versions import (
@@ -34,6 +40,39 @@ from triagent.versions import (
 
 # Classic braille spinner (rotates like a wheel)
 BRAILLE_SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+# Global spinner control for hooks to pause spinner during prompts
+_current_activity_tracker: ActivityTracker | None = None
+
+
+def set_activity_tracker(tracker: ActivityTracker | None) -> None:
+    """Set the current activity tracker for global access.
+
+    Args:
+        tracker: The activity tracker instance or None to clear
+    """
+    global _current_activity_tracker
+    _current_activity_tracker = tracker
+
+
+def pause_spinner() -> None:
+    """Pause the current spinner (called by hooks before prompting).
+
+    This allows hooks to display confirmation prompts without being
+    overwritten by the spinner's continuous refresh.
+    """
+    if _current_activity_tracker:
+        _current_activity_tracker.stop()
+
+
+def flush_buffer() -> None:
+    """Flush any buffered text output before displaying prompts.
+
+    This ensures all accumulated text (when markdown mode is enabled)
+    is displayed before showing confirmation prompts or questions.
+    """
+    if _current_activity_tracker:
+        _current_activity_tracker.flush_remaining()
 
 # Whimsical status messages (Claude Code style)
 THINKING_MESSAGES = ["Thinking", "Mulling", "Pondering", "Contemplating"]
@@ -336,6 +375,7 @@ def handle_slash_command(
     """
     if command in ("exit", "quit", "q"):
         console.print("[dim]Goodbye![/dim]")
+        log_session_end()  # Guard prevents duplicate logging
         return False
 
     if command == "help":
@@ -465,6 +505,26 @@ def process_sdk_message(
             console.print(f"\n[dim]Cost: ${msg.total_cost_usd:.4f}[/dim]", end="")
 
 
+async def _stream_prompt(prompt: str) -> AsyncIterator[dict[str, Any]]:
+    """Convert string prompt to async iterable for streaming mode.
+
+    The Claude Agent SDK's control protocol requires an AsyncIterable prompt
+    to enable the can_use_tool callback for runtime permission decisions.
+    Without streaming mode, the callback is registered but never invoked.
+
+    Args:
+        prompt: The user's input string
+
+    Yields:
+        Message dict in the format expected by the SDK control protocol
+    """
+    yield {
+        "type": "user",
+        "message": {"role": "user", "content": prompt},
+        "session_id": "default",
+    }
+
+
 async def interactive_loop_async(
     console: Console,
     config_manager: ConfigManager,
@@ -484,6 +544,16 @@ async def interactive_loop_async(
     console.print()
     console.print(Panel(create_header(config_manager), border_style="cyan"))
     console.print()
+
+    # Initialize session logging
+    config = config_manager.load_config()
+    session_logger = create_session_logger(
+        session_id=None,  # Auto-generate
+        log_level=config.session_log_level,
+        enabled=config.session_logging,
+    )
+    if session_logger:
+        log_session_start()
 
     # Check if setup is needed
     if not config_manager.config_exists():
@@ -519,7 +589,7 @@ async def interactive_loop_async(
         restart_session = False
 
         # Build SDK options (inside loop to pick up new credentials after /init)
-        client_factory = create_sdk_client(config_manager)
+        client_factory = create_sdk_client(config_manager, console)
         options = client_factory._build_options()
 
         # Create activity tracker for visual feedback
@@ -529,6 +599,8 @@ async def interactive_loop_async(
             verbose=config.verbose,
             markdown_enabled=config.markdown_format,
         )
+        # Make tracker globally accessible for hooks to pause spinner
+        set_activity_tracker(tracker)
 
         # Use SDK context manager for session lifecycle
         try:
@@ -543,6 +615,7 @@ async def interactive_loop_async(
                     except (EOFError, KeyboardInterrupt):
                         console.print()
                         console.print("[dim]Goodbye![/dim]")
+                        log_session_end()  # Guard prevents duplicate logging
                         break
 
                     if not user_input:
@@ -580,7 +653,7 @@ async def interactive_loop_async(
                     console.print()
                     console.print("[bold cyan]Triagent:[/bold cyan] ", end="")
 
-                    await client.query(prompt=user_input)
+                    await client.query(prompt=_stream_prompt(user_input))
 
                     # Stream response
                     async for msg in client.receive_response():
@@ -596,10 +669,13 @@ async def interactive_loop_async(
             console.print(
                 "[dim]Install with: npm install -g @anthropic-ai/claude-code[/dim]"
             )
+            set_activity_tracker(None)
         except ProcessError as e:
             console.print(f"[red]Process error: {e}[/red]")
+            set_activity_tracker(None)
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
+            set_activity_tracker(None)
 
 
 async def async_main(config_manager: ConfigManager) -> None:
