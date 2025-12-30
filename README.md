@@ -96,7 +96,7 @@ See [docs/web-terminal.md](docs/web-terminal.md) for more details.
 
 The `/init` command guides you through configuration:
 
-1. **Model Selection** - Choose API provider (Databricks, Azure Foundry, Anthropic)
+1. **Model Selection** - Choose API provider (Azure Foundry, Anthropic)
 2. **Team Selection** - Choose team and ADO project
 3. **MCP Server Setup** - Configure Azure DevOps MCP server
 4. **Azure Authentication** - Browser-based Azure login
@@ -184,15 +184,13 @@ ruff check src/
 
 ### Optional
 
-- **Claude Code CLI** - For SDK mode (default)
+- **Claude Code CLI** - Required for triagent
   ```bash
   npm install -g @anthropic-ai/claude-code
   ```
-  Or use `triagent --legacy` to skip this requirement.
 
 ### API Access (choose one)
 
-- Databricks Foundation Model API
 - Azure AI Foundry
 - Direct Anthropic API
 

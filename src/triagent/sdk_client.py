@@ -133,8 +133,6 @@ class TriagentSDKClient:
         model = None
         if credentials.api_provider == "azure_foundry":
             model = credentials.anthropic_foundry_model
-        elif credentials.api_provider == "databricks":
-            model = credentials.databricks_model
 
         # Add SSL handling for corporate environments
         if config.disable_ssl_verify:

@@ -45,7 +45,7 @@ def setup_sdk_environment(config_manager: ConfigManager) -> None:
     """Configure environment variables for Claude Agent SDK.
 
     Sets up the required environment variables based on the configured
-    API provider (Azure Foundry, Databricks, or direct Anthropic).
+    API provider (Azure Foundry or direct Anthropic).
 
     Args:
         config_manager: Configuration manager instance
@@ -63,22 +63,6 @@ def setup_sdk_environment(config_manager: ConfigManager) -> None:
 
         # Clear any conflicting env vars
         for key in ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_FOUNDRY_BASE_URL"]:
-            if key in os.environ:
-                del os.environ[key]
-
-    elif credentials.api_provider == "databricks":
-        # Databricks configuration
-        os.environ["ANTHROPIC_BASE_URL"] = credentials.databricks_base_url
-        os.environ["ANTHROPIC_AUTH_TOKEN"] = credentials.databricks_auth_token
-        os.environ["ANTHROPIC_MODEL"] = credentials.databricks_model
-
-        # Clear any conflicting Azure Foundry env vars
-        for key in [
-            "CLAUDE_CODE_USE_FOUNDRY",
-            "ANTHROPIC_FOUNDRY_API_KEY",
-            "ANTHROPIC_FOUNDRY_BASE_URL",
-            "ANTHROPIC_FOUNDRY_RESOURCE",
-        ]:
             if key in os.environ:
                 del os.environ[key]
 
@@ -118,12 +102,6 @@ def get_foundry_env(config_manager: ConfigManager) -> dict[str, str]:
             "ANTHROPIC_FOUNDRY_API_KEY": credentials.anthropic_foundry_api_key,
             "ANTHROPIC_FOUNDRY_RESOURCE": resource,
             "ANTHROPIC_DEFAULT_OPUS_MODEL": credentials.anthropic_foundry_model,
-        }
-    elif credentials.api_provider == "databricks":
-        return {
-            "ANTHROPIC_BASE_URL": credentials.databricks_base_url,
-            "ANTHROPIC_AUTH_TOKEN": credentials.databricks_auth_token,
-            "ANTHROPIC_MODEL": credentials.databricks_model,
         }
     # For direct Anthropic API, no special env vars needed
     return {}
