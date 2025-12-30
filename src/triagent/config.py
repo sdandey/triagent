@@ -67,13 +67,8 @@ class TriagentConfig:
 class TriagentCredentials:
     """Triagent credentials (stored securely)."""
 
-    # API Provider: "databricks" | "azure_foundry" | "anthropic"
-    api_provider: str = "databricks"
-
-    # Databricks credentials
-    databricks_auth_token: str = ""
-    databricks_base_url: str = "https://adb-270181971930646.6.azuredatabricks.net/serving-endpoints/databricks-claude-sonnet-4-5"
-    databricks_model: str = "databricks-claude-sonnet-4-5"
+    # API Provider: "azure_foundry" | "anthropic"
+    api_provider: str = "azure_foundry"
 
     # Azure Foundry credentials
     anthropic_foundry_api_key: str = ""
@@ -88,9 +83,6 @@ class TriagentCredentials:
         """Convert credentials to dictionary."""
         return {
             "api_provider": self.api_provider,
-            "databricks_auth_token": self.databricks_auth_token,
-            "databricks_base_url": self.databricks_base_url,
-            "databricks_model": self.databricks_model,
             "anthropic_foundry_api_key": self.anthropic_foundry_api_key,
             "anthropic_foundry_resource": self.anthropic_foundry_resource,
             "anthropic_foundry_base_url": self.anthropic_foundry_base_url,
@@ -102,13 +94,7 @@ class TriagentCredentials:
     def from_dict(cls, data: dict[str, Any]) -> TriagentCredentials:
         """Create credentials from dictionary."""
         return cls(
-            api_provider=data.get("api_provider", "databricks"),
-            databricks_auth_token=data.get("databricks_auth_token", ""),
-            databricks_base_url=data.get(
-                "databricks_base_url",
-                "https://adb-270181971930646.6.azuredatabricks.net/serving-endpoints/databricks-claude-sonnet-4-5",
-            ),
-            databricks_model=data.get("databricks_model", "databricks-claude-sonnet-4-5"),
+            api_provider=data.get("api_provider", "azure_foundry"),
             anthropic_foundry_api_key=data.get("anthropic_foundry_api_key", ""),
             anthropic_foundry_resource=data.get("anthropic_foundry_resource", ""),
             anthropic_foundry_base_url=data.get("anthropic_foundry_base_url", ""),
@@ -223,11 +209,7 @@ class ConfigManager:
         """Set up environment variables for Claude Agent SDK."""
         credentials = self.load_credentials()
 
-        if credentials.api_provider == "databricks" and credentials.databricks_auth_token:
-            os.environ["ANTHROPIC_BASE_URL"] = credentials.databricks_base_url
-            os.environ["ANTHROPIC_AUTH_TOKEN"] = credentials.databricks_auth_token
-            os.environ["ANTHROPIC_MODEL"] = credentials.databricks_model
-        elif credentials.api_provider == "azure_foundry" and credentials.anthropic_foundry_api_key:
+        if credentials.api_provider == "azure_foundry" and credentials.anthropic_foundry_api_key:
             os.environ["CLAUDE_CODE_USE_FOUNDRY"] = "1"
             os.environ["ANTHROPIC_FOUNDRY_API_KEY"] = credentials.anthropic_foundry_api_key
             os.environ["ANTHROPIC_FOUNDRY_RESOURCE"] = credentials.anthropic_foundry_resource

@@ -108,8 +108,7 @@ class InitReport:
 
 # API Provider options
 API_PROVIDERS = [
-    ("databricks", "Databricks (recommended)"),
-    ("azure_foundry", "Azure AI Foundry"),
+    ("azure_foundry", "Azure AI Foundry (recommended)"),
     ("anthropic", "Direct Anthropic API"),
 ]
 
@@ -290,8 +289,7 @@ def _step_api_provider(
     # Check if already configured
     current_provider = credentials.api_provider
     has_token = (
-        (current_provider == "databricks" and credentials.databricks_auth_token)
-        or (current_provider == "azure_foundry" and credentials.anthropic_foundry_api_key)
+        (current_provider == "azure_foundry" and credentials.anthropic_foundry_api_key)
         or current_provider == "anthropic"
     )
 
@@ -312,7 +310,7 @@ def _step_api_provider(
 
     while True:
         try:
-            choice = input("Enter provider number (1-3): ").strip()
+            choice = input("Enter provider number (1-2): ").strip()
             idx = int(choice) - 1
             if 0 <= idx < len(API_PROVIDERS):
                 break
@@ -328,9 +326,7 @@ def _step_api_provider(
     console.print()
 
     # Configure based on provider
-    if provider_key == "databricks":
-        credentials = _configure_databricks(console, credentials)
-    elif provider_key == "azure_foundry":
+    if provider_key == "azure_foundry":
         credentials = _configure_azure_foundry(console, credentials)
     else:
         console.print("[dim]Using direct Anthropic API (requires ANTHROPIC_API_KEY env var)[/dim]")
@@ -338,91 +334,6 @@ def _step_api_provider(
 
     console.print()
     return credentials
-
-
-def _test_databricks_connection(
-    console: Console,
-    credentials: TriagentCredentials,
-) -> bool:
-    """Test Databricks API connection.
-
-    Args:
-        console: Rich console for output
-        credentials: Credentials to test
-
-    Returns:
-        True if connection successful, False otherwise
-    """
-    from triagent.agent import DatabricksClient
-
-    try:
-        client = DatabricksClient(credentials)
-        # Simple test call with minimal tokens
-        client.send_message(
-            messages=[{"role": "user", "content": "hi"}],
-            max_tokens=10,
-        )
-        return True
-    except Exception as e:
-        console.print(f"[red]✗ Connection failed: {e}[/red]")
-        return False
-
-
-def _configure_databricks(
-    console: Console,
-    credentials: TriagentCredentials,
-) -> TriagentCredentials:
-    """Configure Databricks API settings."""
-    while True:
-        console.print("[dim]Configure Databricks API settings:[/dim]")
-        console.print("[dim]Press Enter to accept default values shown in brackets[/dim]")
-        console.print()
-
-        # Prompt for ANTHROPIC_BASE_URL
-        base_url = input(
-            f"ANTHROPIC_BASE_URL [{credentials.databricks_base_url}]: "
-        ).strip()
-        if base_url:
-            credentials.databricks_base_url = base_url
-
-        # Prompt for ANTHROPIC_MODEL
-        model = input(
-            f"ANTHROPIC_MODEL [{credentials.databricks_model}]: "
-        ).strip()
-        if model:
-            credentials.databricks_model = model
-
-        # Prompt for ANTHROPIC_AUTH_TOKEN (required)
-        token = getpass.getpass("ANTHROPIC_AUTH_TOKEN: ").strip()
-        if not token:
-            console.print()
-            console.print("[yellow]Warning: No token provided. You'll need to configure it later.[/yellow]")
-            return credentials
-
-        credentials.databricks_auth_token = token
-        console.print()
-
-        # Test the connection
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            progress.add_task("Testing connection...")
-            success = _test_databricks_connection(console, credentials)
-
-        if success:
-            console.print("[green]✓[/green] Connection successful!")
-            console.print("[green]✓[/green] Databricks credentials configured")
-            return credentials
-
-        # Connection failed - offer retry
-        console.print()
-        if not confirm_prompt("Retry configuration?", default=True):
-            console.print("[yellow]Skipping connection test. You may need to reconfigure later.[/yellow]")
-            return credentials
-
-        console.print()  # Add spacing before retry
 
 
 def _test_azure_foundry_connection(
@@ -677,7 +588,7 @@ def _step_prerequisites(
         else:
             console.print("[yellow]○[/yellow] Claude Code CLI not found")
             missing_prereqs.append("npm install -g @anthropic-ai/claude-code")
-            report.add_warning("Claude Code CLI not installed - use --legacy flag")
+            report.add_warning("Claude Code CLI not installed - required for triagent")
 
     console.print()
 
@@ -743,7 +654,7 @@ def _show_prerequisites_instructions(
         console.print("[bold]Claude Code CLI:[/bold]")
         console.print("  npm install -g @anthropic-ai/claude-code")
         console.print()
-        console.print("[dim]Or run triagent with --legacy flag to skip Claude Code requirement[/dim]")
+        console.print("[dim]Install Claude Code CLI to use triagent[/dim]")
         console.print()
 
 

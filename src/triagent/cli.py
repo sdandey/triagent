@@ -617,122 +617,6 @@ async def async_main(config_manager: ConfigManager) -> None:
         raise
 
 
-def interactive_loop_legacy(
-    console: Console,
-    config_manager: ConfigManager,
-) -> None:
-    """Legacy sync interactive loop using AgentSession.
-
-    Args:
-        console: Rich console
-        config_manager: Config manager
-    """
-    from triagent.agent import create_agent_session
-
-    # Show header with yellow border for legacy mode
-    console.print()
-    console.print(Panel(create_header(config_manager), border_style="yellow"))
-    console.print("[yellow]Running in legacy mode[/yellow]")
-    console.print()
-
-    # Check if setup is needed
-    if not config_manager.config_exists():
-        console.print(
-            "[yellow]No configuration found. Running setup wizard...[/yellow]"
-        )
-        console.print()
-        if not init_command(console, config_manager):
-            console.print("[red]Setup failed. Exiting.[/red]")
-            return
-
-    try:
-        agent = create_agent_session(config_manager)
-        console.print("[dim]Connected (legacy). Type /help for commands[/dim]")
-        console.print()
-
-        while True:
-            try:
-                user_input = input("You: ").strip()
-            except (EOFError, KeyboardInterrupt):
-                console.print()
-                console.print("[dim]Goodbye![/dim]")
-                break
-
-            if not user_input:
-                continue
-
-            # Handle slash commands
-            if user_input.startswith("/"):
-                command, args = parse_slash_command(user_input)
-                should_continue = handle_slash_command(
-                    command, args, console, config_manager
-                )
-
-                # Reinitialize agent after /init to pick up new credentials
-                if command == "init":
-                    agent = create_agent_session(config_manager)
-
-                if not should_continue:
-                    break
-                continue
-
-            # Check for investigation request
-            investigation = detect_investigation_request(user_input)
-            if investigation:
-                work_item_type, work_item_id = investigation
-                console.print(
-                    f"[cyan]Detected investigation request for "
-                    f"{work_item_type.capitalize()} #{work_item_id}[/cyan]"
-                )
-                user_input = enhance_investigation_prompt(
-                    user_input, work_item_type, work_item_id
-                )
-
-            console.print()
-            console.print("[bold yellow]Triagent (legacy):[/bold yellow] ", end="")
-
-            # Create activity tracker for visual feedback
-            config = config_manager.load_config()
-            tracker = ActivityTracker(
-                console=console,
-                verbose=config.verbose,
-                markdown_enabled=config.markdown_format,
-            )
-
-            # Define callbacks that use the tracker (bind tracker to avoid B023)
-            def on_tool_start(
-                tool_name: str, command: str, _tracker: ActivityTracker = tracker
-            ) -> None:
-                tool_input = {"command": command} if command else None
-                _tracker.tool_starting(tool_name, tool_input)
-
-            def on_tool_end(
-                tool_name: str, success: bool, _tracker: ActivityTracker = tracker
-            ) -> None:
-                _tracker.tool_completed(tool_name, success)
-
-            try:
-                # Use send_message_with_tools for Azure CLI execution
-                for chunk in agent.send_message_with_tools(
-                    user_input,
-                    on_tool_start=on_tool_start,
-                    on_tool_end=on_tool_end,
-                ):
-                    tracker.stop()  # Stop spinner before buffering text
-                    tracker.buffer_text(chunk)
-                # Flush remaining markdown after streaming completes
-                tracker.flush_remaining()
-            except Exception as e:
-                tracker.stop()
-                console.print(f"[red]Error: {e}[/red]")
-
-            tracker.stop()
-            console.print()
-
-    except Exception as e:
-        console.print(f"[red]Error initializing legacy agent: {e}[/red]")
-
-
 @app.command()
 def main(
     version: bool = typer.Option(
@@ -740,9 +624,6 @@ def main(
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-V", help="Enable verbose output"
-    ),
-    legacy: bool = typer.Option(
-        False, "--legacy", help="Use legacy sync client instead of Claude Agent SDK"
     ),
     enable_ssl_verify: bool = typer.Option(
         False,
@@ -770,12 +651,8 @@ def main(
         config.disable_ssl_verify = False  # Re-enable SSL verification
     config_manager.save_config(config)
 
-    # Run in legacy or async mode
     try:
-        if legacy:
-            interactive_loop_legacy(console, config_manager)
-        else:
-            asyncio.run(async_main(config_manager))
+        asyncio.run(async_main(config_manager))
     except KeyboardInterrupt:
         console.print("\n[dim]Goodbye![/dim]")
     except Exception as e:

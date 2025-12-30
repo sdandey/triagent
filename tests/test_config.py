@@ -89,15 +89,12 @@ class TestTriagentCredentials:
         """Test default credential values."""
         creds = TriagentCredentials()
 
-        # Default provider is databricks
-        assert creds.api_provider == "databricks"
-        assert creds.databricks_auth_token == ""
-        assert creds.databricks_base_url == (
-            "https://adb-270181971930646.6.azuredatabricks.net/serving-endpoints/databricks-claude-sonnet-4-5"
-        )
-        assert creds.databricks_model == "databricks-claude-sonnet-4-5"
+        # Default provider is azure_foundry
+        assert creds.api_provider == "azure_foundry"
         assert creds.anthropic_foundry_api_key == ""
         assert creds.anthropic_foundry_resource == ""
+        assert creds.anthropic_foundry_base_url == ""
+        assert creds.anthropic_foundry_model == "claude-opus-4-5"
         assert creds.ado_pat == ""
 
     def test_to_dict(self) -> None:
@@ -106,39 +103,9 @@ class TestTriagentCredentials:
         data = creds.to_dict()
 
         assert data["anthropic_foundry_api_key"] == "test-key"
-        assert data["api_provider"] == "databricks"
-        assert "databricks_auth_token" in data
-        assert "databricks_base_url" in data
-        assert "databricks_model" in data
-
-    def test_databricks_credentials(self) -> None:
-        """Test Databricks credential configuration."""
-        creds = TriagentCredentials(
-            api_provider="databricks",
-            databricks_auth_token="test-token",
-            databricks_base_url="https://test.azuredatabricks.net/serving-endpoints/anthropic",
-            databricks_model="test-model",
-        )
-
-        assert creds.api_provider == "databricks"
-        assert creds.databricks_auth_token == "test-token"
-        assert creds.databricks_base_url == "https://test.azuredatabricks.net/serving-endpoints/anthropic"
-        assert creds.databricks_model == "test-model"
-
-    def test_from_dict_databricks(self) -> None:
-        """Test creation from dictionary with Databricks credentials."""
-        data = {
-            "api_provider": "databricks",
-            "databricks_auth_token": "my-token",
-            "databricks_base_url": "https://my-workspace.azuredatabricks.net/serving-endpoints/anthropic",
-            "databricks_model": "my-model",
-        }
-        creds = TriagentCredentials.from_dict(data)
-
-        assert creds.api_provider == "databricks"
-        assert creds.databricks_auth_token == "my-token"
-        assert creds.databricks_base_url == "https://my-workspace.azuredatabricks.net/serving-endpoints/anthropic"
-        assert creds.databricks_model == "my-model"
+        assert data["api_provider"] == "azure_foundry"
+        assert "anthropic_foundry_base_url" in data
+        assert "anthropic_foundry_model" in data
 
     def test_from_dict_azure_foundry(self) -> None:
         """Test creation from dictionary with Azure Foundry credentials."""
