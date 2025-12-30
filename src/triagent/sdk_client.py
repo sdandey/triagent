@@ -10,16 +10,18 @@ provides the configuration/options builder.
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions
+from rich.console import Console
 
 from triagent.auth import get_foundry_env
 from triagent.config import ConfigManager
 from triagent.hooks import get_triagent_hooks
 from triagent.mcp.tools import create_triagent_mcp_server
+from triagent.permissions import TriagentPermissionHandler
 from triagent.prompts.system import get_system_prompt
 from triagent.utils.windows import get_git_bash_env, is_windows
 from triagent.versions import MCP_AZURE_DEVOPS_VERSION
@@ -31,12 +33,13 @@ class TriagentSDKClient:
 
     Builds ClaudeAgentOptions with:
     - Security hooks (PreToolUse, PostToolUse)
+    - Permission handler for write confirmations
     - In-process MCP tools (triagent-specific)
     - External MCP servers (Azure DevOps)
     - Azure Foundry authentication
 
     Usage:
-        client = create_sdk_client(config_manager)
+        client = create_sdk_client(config_manager, console)
         options = client._build_options()
         async with ClaudeSDKClient(options=options) as sdk_client:
             await sdk_client.query(prompt)
@@ -46,12 +49,23 @@ class TriagentSDKClient:
 
     config_manager: ConfigManager
     team: str
+    console: Console
     working_dir: Path | None = None
+    _permission_handler: TriagentPermissionHandler | None = field(
+        default=None, repr=False, init=False
+    )
 
     def __post_init__(self) -> None:
         """Initialize the client."""
         if self.working_dir is None:
             self.working_dir = Path.cwd()
+
+        # Initialize permission handler
+        config = self.config_manager.load_config()
+        self._permission_handler = TriagentPermissionHandler(
+            console=self.console,
+            auto_approve=config.auto_approve_writes,
+        )
 
     @property
     def system_prompt(self) -> str:
@@ -143,7 +157,8 @@ class TriagentSDKClient:
 
         return ClaudeAgentOptions(
             system_prompt=self.system_prompt,
-            permission_mode="bypassPermissions",
+            permission_mode="default",
+            can_use_tool=self._permission_handler.can_use_tool if self._permission_handler else None,
             cwd=str(self.working_dir) if self.working_dir else None,
             env=env,
             model=model,
@@ -154,11 +169,15 @@ class TriagentSDKClient:
         )
 
 
-def create_sdk_client(config_manager: ConfigManager) -> TriagentSDKClient:
+def create_sdk_client(
+    config_manager: ConfigManager,
+    console: Console,
+) -> TriagentSDKClient:
     """Create a new SDK client configuration builder.
 
     Args:
         config_manager: Configuration manager instance
+        console: Rich console for user interaction
 
     Returns:
         Configured TriagentSDKClient for building options
@@ -168,5 +187,6 @@ def create_sdk_client(config_manager: ConfigManager) -> TriagentSDKClient:
     return TriagentSDKClient(
         config_manager=config_manager,
         team=config.team,
+        console=console,
         working_dir=Path.cwd(),
     )

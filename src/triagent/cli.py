@@ -519,7 +519,7 @@ async def interactive_loop_async(
         restart_session = False
 
         # Build SDK options (inside loop to pick up new credentials after /init)
-        client_factory = create_sdk_client(config_manager)
+        client_factory = create_sdk_client(config_manager, console)
         options = client_factory._build_options()
 
         # Create activity tracker for visual feedback

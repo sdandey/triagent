@@ -8,7 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from claude_agent_sdk.types import HookContext, HookMatcher
+from claude_agent_sdk.types import (
+    HookContext,
+    HookEvent,
+    HookMatcher,
+    PostToolUseHookInput,
+    PreToolUseHookInput,
+)
 
 # Dangerous patterns to block in Bash commands
 DANGEROUS_BASH_PATTERNS = [
@@ -76,9 +82,9 @@ GIT_WRITE_PATTERNS = [
 
 
 async def check_bash_command(
-    input_data: dict[str, Any],
+    input_data: PreToolUseHookInput,
     tool_use_id: str | None,
-    context: HookContext,
+    context: HookContext,  # noqa: ARG001
 ) -> dict[str, Any]:
     """PreToolUse hook to block dangerous Bash commands.
 
@@ -108,9 +114,9 @@ async def check_bash_command(
 
 
 async def confirm_azure_write(
-    input_data: dict[str, Any],
+    input_data: PreToolUseHookInput,
     tool_use_id: str | None,
-    context: HookContext,
+    context: HookContext,  # noqa: ARG001
 ) -> dict[str, Any]:
     """PreToolUse hook to confirm MCP Azure DevOps write operations.
 
@@ -156,9 +162,9 @@ async def confirm_azure_write(
 
 
 async def confirm_azure_cli_write(
-    input_data: dict[str, Any],
+    input_data: PreToolUseHookInput,
     tool_use_id: str | None,
-    context: HookContext,
+    context: HookContext,  # noqa: ARG001
 ) -> dict[str, Any]:
     """PreToolUse hook to confirm Azure CLI write operations.
 
@@ -192,9 +198,9 @@ async def confirm_azure_cli_write(
 
 
 async def confirm_git_write(
-    input_data: dict[str, Any],
+    input_data: PreToolUseHookInput,
     tool_use_id: str | None,
-    context: HookContext,
+    context: HookContext,  # noqa: ARG001
 ) -> dict[str, Any]:
     """PreToolUse hook to confirm git and GitHub CLI write operations.
 
@@ -227,9 +233,9 @@ async def confirm_git_write(
 
 
 async def log_tool_result(
-    input_data: dict[str, Any],
+    input_data: PostToolUseHookInput,
     tool_use_id: str | None,
-    context: HookContext,
+    context: HookContext,  # noqa: ARG001
 ) -> dict[str, Any]:
     """PostToolUse hook to log tool results for debugging.
 
@@ -253,7 +259,7 @@ async def log_tool_result(
     return {}
 
 
-def get_triagent_hooks(config: Any) -> dict[str, list[HookMatcher]]:
+def get_triagent_hooks(config: Any) -> dict[HookEvent, list[HookMatcher]]:
     """Get hooks configuration for Triagent.
 
     Args:
@@ -262,13 +268,13 @@ def get_triagent_hooks(config: Any) -> dict[str, list[HookMatcher]]:
     Returns:
         Dict mapping HookEvent names to list of HookMatchers
     """
-    hooks: dict[str, list[HookMatcher]] = {
+    hooks: dict[HookEvent, list[HookMatcher]] = {
         "PreToolUse": [
             # Security: block dangerous bash commands
-            HookMatcher(matcher="Bash", hooks=[check_bash_command], timeout=120),
+            HookMatcher(matcher="Bash", hooks=[check_bash_command], timeout=120),  # type: ignore[list-item]
         ],
         "PostToolUse": [
-            HookMatcher(matcher=None, hooks=[log_tool_result]),  # All tools
+            HookMatcher(matcher=None, hooks=[log_tool_result]),  # type: ignore[list-item]
         ],
     }
 
@@ -278,7 +284,7 @@ def get_triagent_hooks(config: Any) -> dict[str, list[HookMatcher]]:
         hooks["PreToolUse"].append(
             HookMatcher(
                 matcher="^mcp__azure-devops__",
-                hooks=[confirm_azure_write],
+                hooks=[confirm_azure_write],  # type: ignore[list-item]
                 timeout=300,  # Allow time for user confirmation
             )
         )
@@ -286,7 +292,7 @@ def get_triagent_hooks(config: Any) -> dict[str, list[HookMatcher]]:
         hooks["PreToolUse"].append(
             HookMatcher(
                 matcher="execute_azure_cli",
-                hooks=[confirm_azure_cli_write],
+                hooks=[confirm_azure_cli_write],  # type: ignore[list-item]
                 timeout=300,
             )
         )
@@ -294,7 +300,7 @@ def get_triagent_hooks(config: Any) -> dict[str, list[HookMatcher]]:
         hooks["PreToolUse"].append(
             HookMatcher(
                 matcher="Bash",
-                hooks=[confirm_git_write],
+                hooks=[confirm_git_write],  # type: ignore[list-item]
                 timeout=300,
             )
         )
