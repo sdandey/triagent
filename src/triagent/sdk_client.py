@@ -12,9 +12,9 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
-from claude_agent_sdk import ClaudeAgentOptions
+from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions
 from rich.console import Console
 
 from triagent.auth import get_foundry_env
@@ -23,6 +23,7 @@ from triagent.hooks import get_triagent_hooks
 from triagent.mcp.tools import create_triagent_mcp_server
 from triagent.permissions import TriagentPermissionHandler
 from triagent.prompts.system import get_system_prompt
+from triagent.skills.loader import load_persona
 from triagent.utils.windows import get_git_bash_env, is_windows
 from triagent.versions import MCP_AZURE_DEVOPS_VERSION
 
@@ -37,6 +38,7 @@ class TriagentSDKClient:
     - In-process MCP tools (triagent-specific)
     - External MCP servers (Azure DevOps)
     - Azure Foundry authentication
+    - Persona-based skills and subagents
 
     Usage:
         client = create_sdk_client(config_manager, console)
@@ -49,6 +51,7 @@ class TriagentSDKClient:
 
     config_manager: ConfigManager
     team: str
+    persona: str
     console: Console
     working_dir: Path | None = None
     _permission_handler: TriagentPermissionHandler | None = field(
@@ -69,8 +72,8 @@ class TriagentSDKClient:
 
     @property
     def system_prompt(self) -> str:
-        """Get the system prompt for the current team."""
-        return get_system_prompt(self.team)
+        """Get the system prompt for the current team and persona."""
+        return get_system_prompt(self.team, self.persona)
 
     def _stderr_handler(self, msg: str) -> None:
         """Handle stderr output from Claude CLI."""
@@ -121,6 +124,7 @@ class TriagentSDKClient:
             "Bash",
             "Glob",
             "Grep",
+            "Task",  # Required for subagent invocation
             "WebFetch",
             "WebSearch",
             # In-process triagent MCP tools (read-only)
@@ -168,6 +172,39 @@ class TriagentSDKClient:
             "mcp__azure-devops__trigger_pipeline",
         ]
 
+    def _get_agent_definitions(self) -> dict[str, AgentDefinition]:
+        """Load persona and build AgentDefinition objects for SDK.
+
+        Subagents are generated dynamically from skill content - each skill's
+        markdown content becomes the subagent's prompt, and the skill's
+        description and tools are inherited.
+
+        Returns:
+            Dict mapping subagent names to AgentDefinition objects
+        """
+        persona = load_persona(self.team, self.persona)
+        if not persona or not persona.subagents:
+            return {}
+
+        # Valid model values for AgentDefinition
+        ModelType = Literal["sonnet", "opus", "haiku", "inherit"]
+        valid_models = {"sonnet", "opus", "haiku", "inherit"}
+
+        agents = {}
+        for name, subagent in persona.subagents.items():
+            # Validate and cast model to literal type
+            model: ModelType | None = None
+            if subagent.model in valid_models and subagent.model != "inherit":
+                model = cast(ModelType, subagent.model)
+
+            agents[name] = AgentDefinition(
+                description=subagent.description,
+                prompt=subagent.prompt,
+                tools=subagent.tools if subagent.tools else None,  # None = inherit all
+                model=model,
+            )
+        return agents
+
     def _build_options(self) -> ClaudeAgentOptions:
         """Build SDK options with Azure Foundry credentials and all features.
 
@@ -207,6 +244,7 @@ class TriagentSDKClient:
             hooks=get_triagent_hooks(config),
             mcp_servers=self._get_mcp_config(),
             allowed_tools=self._get_allowed_tools(),
+            agents=self._get_agent_definitions(),  # Subagents for Task tool
             stderr=self._stderr_handler if config.verbose else None,
         )
 
@@ -229,6 +267,7 @@ def create_sdk_client(
     return TriagentSDKClient(
         config_manager=config_manager,
         team=config.team,
+        persona=config.persona,
         console=console,
         working_dir=Path.cwd(),
     )

@@ -184,6 +184,136 @@ git pull origin develop
 
 ---
 
+## Release Pipelines
+
+### Pipeline Naming Conventions
+
+Omnia Data release pipelines follow consistent naming patterns. Use these patterns to identify pipelines (IDs change frequently).
+
+| Prefix | Category | Description |
+|--------|----------|-------------|
+| `Omnia-Data-deploy-helm-` | Helm | AKS/Kubernetes deployments |
+| `Omnia-Data-deploy-databricks-infra-` | Databricks Infra | Databricks workspace infrastructure |
+| `Omnia-Data-deploy-platform-notebooks-` | Notebooks | Databricks notebook deployments |
+| `Omnia-Data-deploy-appconfiguration-` | App Config | Azure App Configuration |
+| `Omnia-Data-deploy-content-library-` | Content Library | Shared content artifacts |
+| `Omnia-Data-datamangement-services-` | Data Management | cortex-datamanagement-services |
+| `Omnia-Data-deploy-wj&fa-` | WJ&FA | Workpaper/FA deployments |
+| `Omnia-Data-integration-services-` | Integration | Integration service |
+| `OmniaData-je-deploy-` | JE Deploy | JE Analytics API/Jobs |
+| `OmniaData-je-fdr-` | JE FDR | JE Full Data Refresh |
+
+### Version Patterns
+
+| Version | Pattern | Status | Use Case |
+|---------|---------|--------|----------|
+| 9.5 | `Release-9.5$` or `-9.5$` | **Production** | Current live release |
+| 9.5.1 | `Release-9.5.1$` | Production Hotfix | Post-release fixes |
+| 9.5.1.200 | `-9.5.1.200$` | Specific Hotfix | Targeted fixes |
+| 9.6 WIP | `Release.9.6.WIP$` | **Development** | Next release development |
+| 9.4.x | `-9.4$` or `-9.4.1$` | Legacy | Archived |
+
+### Current Production Pipelines (9.5.x)
+
+| Category | Pipeline Name | Purpose |
+|----------|---------------|---------|
+| Helm | `Omnia-Data-deploy-helm-9.5` | AKS/Helm deployments |
+| Helm | `Omnia-Data-deploy-helm-9.5.1` | Helm (9.5.1 hotfix) |
+| Helm | `Omnia-Data-deploy-helm-9.5.1.200` | Helm (9.5.1.200 hotfix) |
+| Data Mgmt | `Omnia-Data-datamangement-services-Release-9.5` | Data Management Services |
+| Data Mgmt | `Omnia-Data-datamangement-services-Release-9.5.1` | Data Management (9.5.1) |
+| App Config | `Omnia-Data-deploy-appconfiguration-9.5` | App Configuration |
+| App Config | `Omnia-Data-deploy-appconfiguration-9.5.1` | App Configuration (9.5.1) |
+| DBX Infra | `Omnia-Data-deploy-databricks-infra-Release-9.5` | Databricks Infrastructure |
+| DBX Infra | `Omnia-Data-deploy-databricks-infra-Release-9.5.1` | DBX Infra (9.5.1) |
+| DBX Infra | `Omnia-Data-deploy-databricks-infra-Release-9.5.1.200` | DBX Infra (9.5.1.200) |
+| Notebooks | `Omnia-Data-deploy-platform-notebooks-Release-9.5` | Platform Notebooks |
+| Notebooks | `Omnia-Data-deploy-platform-notebooks-Release-9.5.1` | Notebooks (9.5.1) |
+| Notebooks | `Omnia-Data-deploy-platform-notebooks-Release-9.5.1.200` | Notebooks (9.5.1.200) |
+| Content | `Omnia-Data-deploy-content-library-artifacts-9.5` | Content Library |
+| Content | `Omnia-Data-deploy-content-library-artifacts-9.5.1` | Content Library (9.5.1) |
+| WJ&FA | `Omnia-Data-deploy-wj&fa-9.5` | Workpaper/FA |
+| Integration | `Omnia-Data-integration-services-9.5` | Integration Services |
+| JE Deploy | `OmniaData-je-deploy-analyticsapi-analyticsjobs-Release-9.5` | JE Analytics API |
+| JE Deploy | `OmniaData-je-deploy-analyticsapi-analyticsjobs-Release-9.5.1` | JE Analytics (9.5.1) |
+| JE Deploy | `OmniaData-je-deploy-analyticsapi-analyticsjobs-Hotfix-9.5.1.100` | JE Analytics Hotfix |
+| JE FDR | `OmniaData-je-fdr-all-Release-9.5` | JE Full Data Refresh |
+
+### Development Pipelines (9.6 WIP)
+
+| Category | Pipeline Name |
+|----------|---------------|
+| Helm | `Omnia-Data-deploy-helm-Release-9.6 WIP` |
+| Data Mgmt | `Omnia-Data-datamangement-services-Release 9.6 WIP` |
+| App Config | `Omnia-Data-deploy-appconfiguration-Release -9.6 WIP` |
+| DBX Infra | `Omnia-Data-deploy-databricks-infra-Release 9.6 WIP` |
+| Notebooks | `Omnia-Data-deploy-platform-notebooks-Release 9.6 WIP` |
+| Content | `Omnia-Data-deploy-content-library-artifacts-Release  9.6 WIP` |
+| WJ&FA | `Omnia-Data-deploy-wj&fa-Release 9.6 WIP` |
+| Integration | `Omnia-Data-integration-services -Release 9.6 WIP` |
+| JE Deploy | `OmniaData-je-deploy-analyticsapi-analyticsjobs-Release 9.6 WIP` |
+| JE FDR | `OmniaData-je-fdr-all-Release 9.6 WIP` |
+
+### Deployment Stages
+
+Standard deployment stages across all Omnia Data pipelines:
+
+| Stage | Type | Rank | Description |
+|-------|------|------|-------------|
+| AME DEV2, DEV, DEV1 | Development | 1-4 | Development environments |
+| AME QAS2, QAS, QAS1 | QA | 3-5 | Quality assurance |
+| LOD-* | Load Test | 7-9 | Performance/cost testing |
+| AME STG2, STG | Staging | 11-12 | Pre-production |
+| EMA STG, APA STG | Staging | 13-14 | Regional staging |
+| AME CNT1 | Continuity | 16 | DR testing |
+| AME PRD | **Production** | 17 | Americas production |
+| EMA PRD | **Production** | 18 | EMA production |
+| APA PRD | **Production** | 19 | APA production |
+| AME BCP, EMA BCP, APA BCP | BCP | 20-22 | Disaster recovery |
+| EMA INT | Integration | 25 | EMA integration |
+| TOSCA-* | Automation | 26-27 | Test automation |
+
+### Pipeline Query Commands
+
+#### List all Omnia Data pipelines
+```bash
+az pipelines release definition list \
+  --organization https://dev.azure.com/symphonyvsts \
+  --project "Audit Cortex 2" \
+  --query "[?contains(name, 'Omnia-Data') || contains(name, 'OmniaData')].{Name:name, ID:id}" \
+  -o table
+```
+
+#### Find pipelines by category (e.g., helm)
+```bash
+az pipelines release definition list \
+  --organization https://dev.azure.com/symphonyvsts \
+  --project "Audit Cortex 2" \
+  --query "[?contains(name, 'deploy-helm')].{Name:name, ID:id}" \
+  -o table
+```
+
+#### Find pipelines by version (e.g., 9.5)
+```bash
+az pipelines release definition list \
+  --organization https://dev.azure.com/symphonyvsts \
+  --project "Audit Cortex 2" \
+  --query "[?contains(name, '9.5') && (contains(name, 'Omnia-Data') || contains(name, 'OmniaData'))].{Name:name, ID:id}" \
+  -o table
+```
+
+#### Get pipeline stages
+```bash
+az pipelines release definition show \
+  --organization https://dev.azure.com/symphonyvsts \
+  --project "Audit Cortex 2" \
+  --name "<PIPELINE_NAME>" \
+  --query "{Name:name, Environments:environments[].name}" \
+  -o json
+```
+
+---
+
 ## Databricks Environment
 - Workspace: Databricks Unity Catalog
 - Clusters: Use Serverless compute when available
@@ -226,10 +356,10 @@ All Application Insights are backed by Log Analytics workspaces with LogAnalytic
 
 | Env | App Insights | Resource Group | Log Analytics Workspace | Workspace ID | LAW Resource Group | Subscription | Subscription ID |
 |-----|--------------|----------------|------------------------|--------------|-------------------|--------------|-----------------|
-| INT | APPIN_CORTEX_APPLICATION_GENERAL_INT | App-Cortex-PaaS-EMA-INT-RG | npdemacortexlaw | *TBD* | app-cortex-ema-npd-shared-rg | US_AUDIT_PREPROD | `d7ac9c0b-155b-42a8-9d7d-87e883f82d5d` |
-| STG | APPIN_CORTEX_APPLICATION_GENERAL_STG | App-Cortex-PaaS-EMA-STG-RG | npdemacortexlaw | *TBD* | app-cortex-ema-npd-shared-rg | US_AUDIT_PREPROD | `d7ac9c0b-155b-42a8-9d7d-87e883f82d5d` |
-| PRD | APPIN_CORTEX_APPLICATION_GENERAL_PRD | App-Cortex-PaaS-EMA-PRD-RG | prdemacortexlaw | *TBD* | app-cortex-ema-prd-shared-rg | US_AUDIT_PROD | `8c71ef53-4473-4862-af36-bae6e40451b2` |
-| BCP | APPIN_CORTEX_APPLICATION_GENERAL_BCP | App-Cortex-PaaS-EMA-BCP-RG | bcpemacortexlaw | *TBD* | app-cortex-ema-bcp-shared-rg | US_AUDIT_PROD | `8c71ef53-4473-4862-af36-bae6e40451b2` |
+| INT | APPIN_CORTEX_APPLICATION_GENERAL_INT | App-Cortex-PaaS-EMA-INT-RG | icortexjeemala | `8c9be877-4f75-45ed-b34a-e067a87918c0` | app-cortex-paas-ema-int-rg | US-AZSUB-EMA-AUD-NPD-01 | `429c67ab-6761-4617-a512-a4743395cede` |
+| STG | APPIN_CORTEX_APPLICATION_GENERAL_STG | App-Cortex-PaaS-EMA-STG-RG | scortexjeemala | `9cb4fe2f-645d-45ae-83c0-fe5b88309aef` | app-cortex-paas-ema-stg-rg | US-AZSUB-EMA-AUD-PRD-01 | `62c1dd5c-d918-4a4d-b0ee-18d5e7d5071b` |
+| PRD | APPIN_CORTEX_APPLICATION_GENERAL_PRD | App-Cortex-PaaS-EMA-PRD-RG | prdemacortexlaw | `b3f751c4-5cce-4caa-a3fb-eccbe019c661` | App-Cortex-EMA-PRD-Shared-RG | US-AZSUB-EMA-AUD-PRD-01 | `62c1dd5c-d918-4a4d-b0ee-18d5e7d5071b` |
+| BCP | APPIN_CORTEX_APPLICATION_GENERAL_BCP | App-Cortex-PaaS-EMA-BCP-RG | bcortexjeemala | `1ef0ab98-6954-4099-9fd8-2887af05a314` | App-Cortex-PaaS-EMA-BCP-RG | US-AZSUB-EMA-AUD-PRD-01 | `62c1dd5c-d918-4a4d-b0ee-18d5e7d5071b` |
 
 ### APAC (Asia Pacific) Environments
 
@@ -249,8 +379,8 @@ All Application Insights are backed by Log Analytics workspaces with LogAnalytic
 |--------|--------------|-----------------|----------------|
 | AME (Americas) Non-Prod | US_AUDIT_PREPROD | `d7ac9c0b-155b-42a8-9d7d-87e883f82d5d` | `az account set -s d7ac9c0b-155b-42a8-9d7d-87e883f82d5d` |
 | AME (Americas) Prod | US_AUDIT_PROD | `8c71ef53-4473-4862-af36-bae6e40451b2` | `az account set -s 8c71ef53-4473-4862-af36-bae6e40451b2` |
-| EMA Non-Prod | US_AUDIT_PREPROD | `d7ac9c0b-155b-42a8-9d7d-87e883f82d5d` | `az account set -s d7ac9c0b-155b-42a8-9d7d-87e883f82d5d` |
-| EMA Prod | US_AUDIT_PROD | `8c71ef53-4473-4862-af36-bae6e40451b2` | `az account set -s 8c71ef53-4473-4862-af36-bae6e40451b2` |
+| **EMA Non-Prod** | US-AZSUB-EMA-AUD-NPD-01 | `429c67ab-6761-4617-a512-a4743395cede` | `az account set -s 429c67ab-6761-4617-a512-a4743395cede` |
+| **EMA Prod** | US-AZSUB-EMA-AUD-PRD-01 | `62c1dd5c-d918-4a4d-b0ee-18d5e7d5071b` | `az account set -s 62c1dd5c-d918-4a4d-b0ee-18d5e7d5071b` |
 | **APA (Asia Pacific)** | US_AUDIT_APA | `b2fcc9cc-5757-42d3-980c-d92d66bab682` | `az account set -s b2fcc9cc-5757-42d3-980c-d92d66bab682` |
 
 #### Example: Query APA Production Logs
@@ -274,12 +404,11 @@ az monitor log-analytics query \
 
 ```bash
 # Step 1: Switch to EMA Prod subscription
-az account set -s 8c71ef53-4473-4862-af36-bae6e40451b2
+az account set -s 62c1dd5c-d918-4a4d-b0ee-18d5e7d5071b
 
-# Step 2: Query Log Analytics (use Workspace ID from table above)
-# Note: EMA Workspace IDs are marked as TBD - obtain from Azure Portal or team lead
+# Step 2: Query Log Analytics (use Workspace ID)
 az monitor log-analytics query \
-  --workspace <EMA_WORKSPACE_ID> \
+  --workspace b3f751c4-5cce-4caa-a3fb-eccbe019c661 \
   --analytics-query "AppExceptions | where TimeGenerated > ago(1h) | take 10"
 ```
 
@@ -573,3 +702,4 @@ Audit Cortex 2
 | Core Data Engineering | `Audit Cortex 2\Omnia Data\Core Data Engineering` |
 | Health Monitoring | `Audit Cortex 2\Omnia Data\Health Monitoring` |
 | SpaceBots | `Audit Cortex 2\Omnia Data\SpaceBots` |
+

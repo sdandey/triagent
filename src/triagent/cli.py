@@ -21,6 +21,7 @@ from triagent import __version__
 from triagent.commands.config import config_command
 from triagent.commands.help import help_command
 from triagent.commands.init import init_command
+from triagent.commands.persona import persona_command
 from triagent.commands.team import team_command
 from triagent.commands.team_report import team_report_command
 from triagent.config import ConfigManager, get_config_manager
@@ -30,12 +31,17 @@ from triagent.session_logger import (
     log_session_end,
     log_session_start,
 )
+from triagent.skills import get_available_personas
 from triagent.teams.config import get_team_config
 from triagent.utils.windows import find_git_bash, is_windows
 from triagent.versions import (
     AZURE_EXTENSION_VERSIONS,
     CLAUDE_CODE_VERSION,
     MCP_AZURE_DEVOPS_VERSION,
+)
+from triagent.visibility.subagent_visibility import (
+    show_subagent_complete,
+    show_subagent_start,
 )
 
 # Classic braille spinner (rotates like a wheel)
@@ -101,11 +107,14 @@ class ActivityTracker:
     console: Console
     verbose: bool = False
     markdown_enabled: bool = False  # If True, buffer for markdown; False streams plain text
+    use_nerd_fonts: bool = True  # If True, use Nerd Font icons for subagents
     _live: Live | None = field(default=None, repr=False)
     _spinner_idx: int = field(default=0, repr=False)
     _tool_start_time: float = field(default=0.0, repr=False)
     _current_tool: str = field(default="", repr=False)
     _text_buffer: str = field(default="", repr=False)
+    _current_subagent: str = field(default="", repr=False)  # Track active subagent type
+    _current_tool_id: str = field(default="", repr=False)  # Track tool_use_id for matching
 
     def _get_spinner_char(self) -> str:
         """Get next spinner character."""
@@ -220,7 +229,15 @@ def create_header(config_manager: ConfigManager) -> str:
     team_config = get_team_config(config.team)
     team_name = team_config.display_name if team_config else config.team
 
-    return f"[bold cyan]Triagent CLI v{__version__}[/bold cyan] | Team: {team_name} | Project: {config.ado_project}"
+    # Get persona display name
+    personas = get_available_personas(config.team)
+    persona_display = config.persona.title()
+    for p in personas:
+        if p.name == config.persona:
+            persona_display = p.display_name
+            break
+
+    return f"[bold cyan]Triagent CLI v{__version__}[/bold cyan] | Team: {team_name} | Persona: {persona_display} | Project: {config.ado_project}"
 
 
 def versions_command(console: Console) -> None:
@@ -361,7 +378,8 @@ def handle_slash_command(
     args: list[str],
     console: Console,
     config_manager: ConfigManager,
-) -> bool:
+    sdk_commands: list[str] | None = None,
+) -> bool | str:
     """Handle a slash command synchronously.
 
     Args:
@@ -369,9 +387,11 @@ def handle_slash_command(
         args: Command arguments
         console: Rich console
         config_manager: Config manager
+        sdk_commands: Available SDK commands (for /help display)
 
     Returns:
-        True to continue, False to exit
+        True to continue, False to exit, "sdk" to forward to SDK,
+        "restart" to restart session
     """
     if command in ("exit", "quit", "q"):
         console.print("[dim]Goodbye![/dim]")
@@ -379,7 +399,7 @@ def handle_slash_command(
         return False
 
     if command == "help":
-        help_command(console)
+        help_command(console, sdk_commands=sdk_commands)
         return True
 
     if command == "init":
@@ -393,6 +413,14 @@ def handle_slash_command(
     if command == "team":
         team_name = args[0] if args else None
         team_command(console, config_manager, team_name)
+        return True
+
+    if command == "persona":
+        persona_name = args[0] if args else None
+        changed = persona_command(console, config_manager, persona_name)
+        # Return "restart" to signal SDK restart needed (special return value)
+        if changed:
+            return "restart"  # type: ignore
         return True
 
     if command == "clear":
@@ -431,10 +459,8 @@ def handle_slash_command(
             console.print("[dim]  off - Auto-approve write operations[/dim]")
         return True
 
-    # Unknown command
-    console.print(f"[red]Unknown command: /{command}[/red]")
-    console.print("[dim]Type /help for available commands[/dim]")
-    return True
+    # Unknown CLI command - forward to SDK
+    return "sdk"
 
 
 def process_sdk_message(
@@ -464,6 +490,26 @@ def process_sdk_message(
             elif block_type == "ToolUseBlock":
                 # Start spinner for tool execution
                 tool_input = getattr(block, "input", None)
+                tool_id = getattr(block, "id", "")
+                tracker._current_tool_id = tool_id
+
+                # Check if this is a Task (subagent) invocation
+                if block.name == "Task" and tool_input:
+                    subagent_type = tool_input.get("subagent_type", "")
+                    description = tool_input.get("description", "")
+                    if subagent_type:
+                        tracker._current_subagent = subagent_type
+                        # Stop any existing spinner before showing subagent indicator
+                        tracker.stop()
+                        # Show subagent start indicator and log it
+                        show_subagent_start(
+                            console=tracker.console,
+                            subagent_type=subagent_type,
+                            use_nerd_fonts=tracker.use_nerd_fonts,
+                            trigger=description,
+                            context={"prompt": tool_input.get("prompt", "")[:200]},
+                        )
+
                 tracker.tool_starting(block.name, tool_input)
 
             elif block_type == "ThinkingBlock":
@@ -483,11 +529,60 @@ def process_sdk_message(
                     if hasattr(block, "content")
                     else ""
                 )
+
+                # Check if this was a subagent task completion
+                if tracker._current_subagent and tracker._current_tool == "Task":
+                    # Create brief result summary (first 100 chars)
+                    result_summary = content[:100] if content else "completed"
+                    if len(content) > 100:
+                        result_summary += "..."
+                    # Show subagent completion indicator and log it
+                    show_subagent_complete(
+                        console=tracker.console,
+                        subagent_type=tracker._current_subagent,
+                        result_summary=result_summary,
+                        use_nerd_fonts=tracker.use_nerd_fonts,
+                        is_error=is_error,
+                    )
+                    tracker._current_subagent = ""  # Clear subagent tracking
+
                 tracker.tool_completed(
                     tracker._current_tool or "tool",
                     not is_error,
                     content,
                 )
+
+    elif msg_type == "SystemMessage":
+        # Handle system messages (including SDK slash command responses)
+        tracker.stop()
+        subtype = getattr(msg, "subtype", "")
+        data = getattr(msg, "data", {})
+
+        if subtype == "command_result":
+            # SDK slash command output
+            output = data.get("output", data.get("result", ""))
+            if output:
+                console.print(output)
+        elif data:
+            # Other system messages - show relevant data
+            if "message" in data:
+                console.print(f"[dim]{data['message']}[/dim]")
+            elif "output" in data:
+                console.print(data["output"])
+
+    elif msg_type == "UserMessage":
+        # Handle SDK slash command output (e.g., /release-notes)
+        # Note: content can be a string (slash commands) or list (regular messages)
+        content = getattr(msg, "content", "")
+        if content and isinstance(content, str):
+            # Only stop spinner and display for actual SDK slash command output
+            tracker.stop()
+            # Strip the <local-command-stdout> wrapper if present
+            cleaned = re.sub(r"<local-command-stdout>\s*", "", content)
+            cleaned = re.sub(r"\s*</local-command-stdout>", "", cleaned)
+            if cleaned.strip():
+                console.print(cleaned.strip())
+        # List content (echoed user input) - don't stop spinner, let it continue
 
     elif msg_type == "ResultMessage":
         # Stop any active spinner
@@ -503,6 +598,12 @@ def process_sdk_message(
 
         if hasattr(msg, "total_cost_usd") and msg.total_cost_usd:
             console.print(f"\n[dim]Cost: ${msg.total_cost_usd:.4f}[/dim]", end="")
+
+    else:
+        # Log unknown message types for debugging
+        if tracker.verbose:
+            console.print(f"\n[dim]Unknown message type: {msg_type}[/dim]")
+            console.print(f"[dim]Message: {msg}[/dim]")
 
 
 async def _stream_prompt(prompt: str) -> AsyncIterator[dict[str, Any]]:
@@ -605,6 +706,15 @@ async def interactive_loop_async(
         # Use SDK context manager for session lifecycle
         try:
             async with ClaudeSDKClient(options=options) as client:
+                # Discover available SDK commands from server info
+                sdk_commands: list[str] = []
+                try:
+                    server_info = await client.get_server_info()
+                    if server_info:
+                        sdk_commands = server_info.get("commands", [])
+                except Exception:
+                    pass  # Fallback: no SDK commands shown in help
+
                 console.print("[dim]Connected to Claude. Type /help for commands[/dim]")
                 console.print()
 
@@ -624,18 +734,21 @@ async def interactive_loop_async(
                     # Handle slash commands
                     if user_input.startswith("/"):
                         command, args = parse_slash_command(user_input)
-                        should_continue = handle_slash_command(
-                            command, args, console, config_manager
+                        result = handle_slash_command(
+                            command, args, console, config_manager, sdk_commands
                         )
 
-                        # Restart SDK client after /init to pick up new credentials
-                        if command == "init":
+                        if result == "sdk":
+                            # Unknown CLI command - forward to SDK as prompt
+                            pass  # Fall through to send to SDK
+                        elif command == "init" or result == "restart":
+                            # Restart SDK client after /init or /persona
                             restart_session = True
                             break
-
-                        if not should_continue:
+                        elif not result:
                             break
-                        continue
+                        else:
+                            continue  # CLI handled it, get next input
 
                     # Check for investigation request
                     investigation = detect_investigation_request(user_input)

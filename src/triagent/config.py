@@ -21,6 +21,7 @@ class TriagentConfig:
     """Triagent configuration settings."""
 
     team: str = "omnia-data"
+    persona: str = "developer"  # Persona type: "developer" | "support"
     azure_cli_authenticated: bool = False
     ado_organization: str = "symphonyvsts"
     ado_project: str = "Audit Cortex 2"
@@ -35,11 +36,14 @@ class TriagentConfig:
     # Session logging settings
     session_logging: bool = True  # Enable/disable session logging
     session_log_level: str = "INFO"  # Log level: DEBUG, INFO, WARNING, ERROR
+    # Icon settings
+    use_nerd_fonts: bool = True  # If True, use Nerd Font icons; False uses ASCII fallback
 
     def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
         return {
             "team": self.team,
+            "persona": self.persona,
             "azure_cli_authenticated": self.azure_cli_authenticated,
             "ado_organization": self.ado_organization,
             "ado_project": self.ado_project,
@@ -50,6 +54,7 @@ class TriagentConfig:
             "markdown_format": self.markdown_format,
             "session_logging": self.session_logging,
             "session_log_level": self.session_log_level,
+            "use_nerd_fonts": self.use_nerd_fonts,
         }
 
     @classmethod
@@ -57,6 +62,7 @@ class TriagentConfig:
         """Create config from dictionary."""
         return cls(
             team=data.get("team", "omnia-data"),
+            persona=data.get("persona", "developer"),
             azure_cli_authenticated=data.get("azure_cli_authenticated", False),
             ado_organization=data.get("ado_organization", "symphonyvsts"),
             ado_project=data.get("ado_project", "Audit Cortex 2"),
@@ -67,6 +73,7 @@ class TriagentConfig:
             markdown_format=data.get("markdown_format", False),
             session_logging=data.get("session_logging", True),
             session_log_level=data.get("session_log_level", "INFO"),
+            use_nerd_fonts=data.get("use_nerd_fonts", True),
         )
 
 
