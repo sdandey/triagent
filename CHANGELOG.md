@@ -7,20 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed
-- **BREAKING**: Removed `--legacy` CLI flag and Databricks implementation
-- Removed `DatabricksClient`, `AgentSession`, and related legacy code (~1046 lines)
-- Removed Databricks as an API provider option
+### Added
+- **Issue Creation Workflow** in CLAUDE.md with templates for:
+  - Acceptance Criteria from user perspective
+  - Testing Guide with test scenarios (unit, integration, E2E)
+  - Implementation task comments with code examples
+  - PR validation checklist
+- **Issue Implementation Workflow** for branch → implement → test → commit → PR cycle
+- **Skills & Persona Architecture**:
+  - `/persona` command to switch between developer/support modes
+  - Skills loader with YAML persona definitions
+  - Team-specific skill files for omnia-data team
+  - Developer persona skills: code review, PR management, release investigation
+  - Support persona skills: ADO work items, telemetry analysis
+- **SDK Slash Command Pass-through**:
+  - Claude Code SDK command discovery via `get_server_info()`
+  - Pass unknown slash commands through to SDK (e.g., `/release-notes`)
+  - Display SDK commands in `/help` alongside triagent commands
+- **Subagent Visibility** indicators with Nerd Font icons
+- **Comprehensive Staging Service API documentation** for Issue #23:
+  - File browse, search, upload/download operations
+  - Data Kitchen Service file APIs
+  - Common user prompts & API mapping
+- E2E tests for local and Docker environments (`tests/e2e/`)
+- Updated README.md with architecture documentation
+- Platform setup instructions for macOS and Windows
 
 ### Changed
 - Now uses Claude Agent SDK exclusively for all operations
 - Default API provider changed from `databricks` to `azure_foundry`
 - Version now read dynamically from package metadata
+- Updated Issue #23 with Staging Service and Data Kitchen file operation APIs
+- Enhanced acceptance criteria for file browsing and search operations
 
-### Added
-- E2E tests for local and Docker environments (`tests/e2e/`)
-- Updated README.md with architecture documentation
-- Platform setup instructions for macOS and Windows
+### Removed
+- **BREAKING**: Removed `--legacy` CLI flag and Databricks implementation
+- Removed `DatabricksClient`, `AgentSession`, and related legacy code (~1046 lines)
+- Removed Databricks as an API provider option
 
 ## [1.3.0] - 2025-12-28
 
