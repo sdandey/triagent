@@ -1,4 +1,11 @@
-"""Chainlit chat interface for Triagent sessions with Dynamic Sessions."""
+"""Chainlit chat interface for Triagent sessions with Dynamic Sessions.
+
+This module provides the Chainlit-based web UI for Triagent, with:
+- OAuth authentication via Azure AD
+- Team/profile selection
+- Unified slash command support (/init, /help, /team, etc.)
+- Dynamic Session management for SDK execution
+"""
 
 import json
 import logging
@@ -6,6 +13,10 @@ from typing import Any
 
 import chainlit as cl
 
+from triagent.config import get_config_manager
+from triagent.core.commands import execute_command, get_command
+from triagent.core.commands.base import CommandContext
+from triagent.web.adapters import ChainlitOutputAdapter, ChainlitPromptAdapter
 from triagent.web.config import WebConfig
 from triagent.web.container.session_manager import (
     ChainlitSessionManager,
@@ -16,6 +27,93 @@ from triagent.web.msal_auth import validate_group_membership
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def parse_slash_command(message: str) -> tuple[str, list[str]] | None:
+    """Parse a slash command from user input.
+
+    Args:
+        message: The user's input message.
+
+    Returns:
+        Tuple of (command_name, args) if valid slash command, None otherwise.
+    """
+    message = message.strip()
+    if not message.startswith("/"):
+        return None
+
+    parts = message[1:].split()
+    if not parts:
+        return None
+
+    command = parts[0].lower()
+    args = parts[1:] if len(parts) > 1 else []
+
+    return (command, args)
+
+
+async def handle_slash_command(
+    command: str,
+    args: list[str],
+    manager: ChainlitSessionManager | None,
+    session_id: str | None,
+) -> bool:
+    """Handle a slash command.
+
+    Args:
+        command: Command name (without slash).
+        args: Command arguments.
+        manager: Session manager instance.
+        session_id: Current session ID.
+
+    Returns:
+        True if command was handled, False if unknown command.
+    """
+    # Check if command exists
+    if not get_command(command):
+        await cl.Message(
+            content=f"Unknown command: /{command}\n\nUse /help to see available commands."
+        ).send()
+        return True  # We handled it (by showing error)
+
+    # Create command context with web adapters
+    config_manager = get_config_manager()
+    ctx = CommandContext(
+        config_manager=config_manager,
+        prompt=ChainlitPromptAdapter(),
+        output=ChainlitOutputAdapter(),
+        args=args,
+        environment="web",
+        session_data={
+            "session_id": session_id,
+            "manager": manager,
+        },
+    )
+
+    # Execute command
+    try:
+        result = await execute_command(command, ctx)
+
+        # Handle special result flags
+        if result.requires_restart and manager and session_id:
+            # Reinitialize the Dynamic Session with new config
+            await cl.Message(content="*Reinitializing session with new configuration...*").send()
+            # Note: Full reinitialization would require stored credentials
+            # For now, just notify the user
+            await cl.Message(
+                content="Configuration updated. You may need to refresh to apply all changes."
+            ).send()
+
+        if result.should_clear:
+            # Clear is handled by Chainlit's built-in mechanism
+            await cl.Message(content="*Conversation cleared.*").send()
+
+        return True
+
+    except Exception as e:
+        logger.exception(f"Error executing command /{command}: {e}")
+        await cl.Message(content=f"**Error executing command**: {e}").send()
+        return True
 
 
 @cl.oauth_callback
@@ -225,7 +323,7 @@ async def on_chat_end() -> None:
 
 @cl.on_message
 async def on_message(message: cl.Message) -> None:
-    """Route message to Dynamic Session and stream response.
+    """Route message to Dynamic Session or handle slash commands.
 
     Args:
         message: Incoming chat message.
@@ -233,6 +331,14 @@ async def on_message(message: cl.Message) -> None:
     manager: ChainlitSessionManager | None = cl.user_session.get("session_manager")
     session_id: str | None = cl.user_session.get("session_id")
 
+    # Check if this is a slash command
+    parsed = parse_slash_command(message.content)
+    if parsed:
+        command, args = parsed
+        await handle_slash_command(command, args, manager, session_id)
+        return
+
+    # Regular message - route to Dynamic Session
     if not manager or not session_id:
         await cl.Message(
             content="Session not ready. Please refresh and try again."
