@@ -32,7 +32,8 @@ class ConfirmCommand(Command):
             await ctx.output.show_panel(
                 "Write confirmations are now **enabled**.\n\n"
                 "You will be prompted before any write operations "
-                "(creating work items, adding PR comments, etc.).",
+                "(creating work items, adding PR comments, etc.).\n\n"
+                "*Session will restart to apply this change.*",
                 title="Confirmations Enabled",
                 style="success",
             )
@@ -40,7 +41,8 @@ class ConfirmCommand(Command):
             await ctx.output.show_panel(
                 "Write confirmations are now **disabled**.\n\n"
                 "Write operations will execute without prompting. "
-                "Use `/confirm` again to re-enable.",
+                "Use `/confirm` again to re-enable.\n\n"
+                "*Session will restart to apply this change.*",
                 title="Confirmations Disabled",
                 style="warning",
             )
@@ -48,6 +50,7 @@ class ConfirmCommand(Command):
         return CommandResult(
             success=True,
             data={"confirmations_enabled": confirmations_enabled},
+            requires_restart=True,  # Restart SDK to apply new permission setting
         )
 
 
