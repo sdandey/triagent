@@ -101,6 +101,35 @@ def temp_home_dir(
 
 
 @pytest.fixture
+def clean_env_preserve_home(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[None, None, None]:
+    """Clear environment but preserve home directory variables.
+
+    This fixture clears all environment variables except those needed
+    for Path.home() to work (HOME on macOS/Linux, USERPROFILE on Windows).
+
+    Yields:
+        None (context manager)
+    """
+    # Save home dir vars before clearing
+    home = os.environ.get("HOME")
+    userprofile = os.environ.get("USERPROFILE")
+
+    # Clear all env vars
+    for key in list(os.environ.keys()):
+        monkeypatch.delenv(key, raising=False)
+
+    # Restore home dir vars (cross-platform)
+    if home:
+        monkeypatch.setenv("HOME", home)
+    if userprofile:
+        monkeypatch.setenv("USERPROFILE", userprofile)
+
+    yield
+
+
+@pytest.fixture
 def isolated_config_manager(
     isolated_config_dir: Path,
 ) -> "Generator[ConfigManager, None, None]":

@@ -71,9 +71,10 @@ class TestFindGitBash:
             assert result is not None
             assert "bash.exe" in result
 
-    @patch.dict("os.environ", {}, clear=True)
     @patch("shutil.which")
-    def test_common_paths_fallback(self, mock_which: MagicMock) -> None:
+    def test_common_paths_fallback(
+        self, mock_which: MagicMock, clean_env_preserve_home: None
+    ) -> None:
         """Test fallback to common installation paths."""
         mock_which.return_value = None  # git not in PATH
 
@@ -86,11 +87,10 @@ class TestFindGitBash:
 
         assert result == r"C:\Program Files\Git\bin\bash.exe"
 
-    @patch.dict("os.environ", {}, clear=True)
     @patch("shutil.which")
     @patch("pathlib.Path.exists")
     def test_bash_in_path(
-        self, mock_exists: MagicMock, mock_which: MagicMock
+        self, mock_exists: MagicMock, mock_which: MagicMock, clean_env_preserve_home: None
     ) -> None:
         """Test finding bash directly in PATH."""
         mock_exists.return_value = False  # No common paths exist
@@ -105,11 +105,10 @@ class TestFindGitBash:
         result = find_git_bash()
         assert result == "/usr/bin/bash"
 
-    @patch.dict("os.environ", {}, clear=True)
     @patch("shutil.which")
     @patch("pathlib.Path.exists")
     def test_not_found(
-        self, mock_exists: MagicMock, mock_which: MagicMock
+        self, mock_exists: MagicMock, mock_which: MagicMock, clean_env_preserve_home: None
     ) -> None:
         """Test when git bash is not found anywhere."""
         mock_exists.return_value = False
