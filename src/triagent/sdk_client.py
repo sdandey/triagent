@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from claude_agent_sdk import ClaudeAgentOptions
+from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions
 from rich.console import Console
 
 from triagent.auth import get_foundry_env
@@ -121,6 +121,7 @@ class TriagentSDKClient:
             "Bash",
             "Glob",
             "Grep",
+            "Task",  # Required for sub-agent invocation
             "WebFetch",
             "WebSearch",
             # In-process triagent MCP tools (read-only)
@@ -168,6 +169,51 @@ class TriagentSDKClient:
             "mcp__azure-devops__trigger_pipeline",
         ]
 
+    def _get_agent_definitions(self) -> dict[str, AgentDefinition]:
+        """Get agent definitions for the Task tool.
+
+        Loads agent configurations and returns them as AgentDefinition objects
+        that can be passed to ClaudeAgentOptions.agents.
+
+        Returns:
+            Dict mapping agent names to AgentDefinition objects
+        """
+        from triagent.agents.defect_investigator import DEFECT_INVESTIGATOR_CONFIG
+        from triagent.agents.pr_code_reviewer import PR_CODE_REVIEWER_CONFIG
+
+        return {
+            # Existing defect investigator agent
+            "defect-investigator": AgentDefinition(
+                description=DEFECT_INVESTIGATOR_CONFIG["description"],
+                prompt=DEFECT_INVESTIGATOR_CONFIG["prompt"],
+                tools=DEFECT_INVESTIGATOR_CONFIG.get("tools"),
+                model=DEFECT_INVESTIGATOR_CONFIG.get("model"),
+            ),
+            # PR code reviewer for pull request reviews
+            "pr-code-reviewer": AgentDefinition(
+                description=PR_CODE_REVIEWER_CONFIG["description"],
+                prompt=PR_CODE_REVIEWER_CONFIG["prompt"],
+                tools=PR_CODE_REVIEWER_CONFIG.get("tools"),
+                model=PR_CODE_REVIEWER_CONFIG.get("model"),
+            ),
+            # Python code reviewer for testing sub-agent execution
+            "python-code-reviewer": AgentDefinition(
+                description="Review Python code for best practices, bugs, and improvements",
+                prompt="""You are an expert Python code reviewer.
+
+Review the code for:
+1. PEP 8 style compliance
+2. Type hints usage
+3. Error handling patterns
+4. Performance issues
+5. Security vulnerabilities
+
+Provide specific, actionable feedback with line numbers.""",
+                tools=["Read", "Glob", "Grep"],
+                model="sonnet",
+            ),
+        }
+
     def _build_options(self) -> ClaudeAgentOptions:
         """Build SDK options with Azure Foundry credentials and all features.
 
@@ -207,6 +253,7 @@ class TriagentSDKClient:
             hooks=get_triagent_hooks(config),
             mcp_servers=self._get_mcp_config(),
             allowed_tools=self._get_allowed_tools(),
+            agents=self._get_agent_definitions(),  # Register sub-agents for Task tool
             stderr=self._stderr_handler if config.verbose else None,
         )
 

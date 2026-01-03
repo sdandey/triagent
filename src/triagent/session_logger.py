@@ -168,6 +168,23 @@ def is_write_operation(tool_name: str) -> bool:
     return False
 
 
+def is_subagent_invocation(tool_name: str, tool_input: dict[str, Any]) -> tuple[bool, str | None]:
+    """Check if this is a subagent invocation via Task tool.
+
+    Args:
+        tool_name: Name of the tool
+        tool_input: Tool input parameters
+
+    Returns:
+        Tuple of (is_subagent, subagent_name)
+    """
+    if tool_name == "Task":
+        subagent_type = tool_input.get("subagent_type")
+        if subagent_type:
+            return True, subagent_type
+    return False, None
+
+
 def create_session_logger(
     session_id: str | None = None,
     log_level: str = "INFO",
@@ -284,6 +301,7 @@ async def pre_tool_use_logger(
     """Log tool call before execution.
 
     This is an SDK hook callback that logs tool invocations.
+    Provides enhanced logging for subagent invocations via Task tool.
 
     Args:
         input_data: Hook input data containing tool_name, tool_input, etc.
@@ -293,15 +311,42 @@ async def pre_tool_use_logger(
     Returns:
         Empty dict to allow the operation (just logging, no blocking)
     """
-    if _session_logger:
-        tool_name = input_data.get("tool_name", "unknown")
-        tool_input = redact_sensitive_data(input_data.get("tool_input", {}))
+    try:
+        tool_name = str(input_data.get("tool_name", "unknown") or "unknown")
+        tool_input = input_data.get("tool_input") or {}
+        if not isinstance(tool_input, dict):
+            tool_input = {}
         is_write = is_write_operation(tool_name)
 
-        _session_logger.info(
-            f"PRE_TOOL_USE tool={tool_name} tool_use_id={tool_use_id} "
-            f"is_write={is_write} input={tool_input}"
-        )
+        # Check for subagent invocation via Task tool
+        is_subagent, subagent_name = is_subagent_invocation(tool_name, tool_input)
+
+        if is_subagent:
+            # Visual indicator for subagent invocation (testing)
+            description = str(tool_input.get("description", "") or "")
+            print(f"\n🤖 [SUBAGENT] Invoking: {subagent_name}")
+            print(f"   Description: {description}")
+            print()
+
+            # Special logging for subagent invocations
+            if _session_logger:
+                prompt = str(tool_input.get("prompt", "") or "")[:100] + "..."
+                _session_logger.info(
+                    f"SUBAGENT_START subagent={subagent_name} "
+                    f"tool_use_id={tool_use_id} "
+                    f'description="{description}" '
+                    f'prompt="{redact_sensitive_data(prompt)}"'
+                )
+        else:
+            # Standard tool logging
+            if _session_logger:
+                redacted_input = redact_sensitive_data(tool_input)
+                _session_logger.info(
+                    f"PRE_TOOL_USE tool={tool_name} tool_use_id={tool_use_id} "
+                    f"is_write={is_write} input={redacted_input}"
+                )
+    except Exception:
+        pass  # Don't let logging errors break the session
 
     return {}  # Don't block, just log
 
@@ -323,21 +368,24 @@ async def post_tool_use_logger(
     Returns:
         Empty dict to allow the operation (just logging, no blocking)
     """
-    if _session_logger:
-        tool_name = input_data.get("tool_name", "unknown")
-        tool_response = input_data.get("tool_response", "")
+    try:
+        if _session_logger:
+            tool_name = input_data.get("tool_name", "unknown")
+            tool_response = input_data.get("tool_response", "")
 
-        # Truncate long responses
-        response_str = str(tool_response)
-        if len(response_str) > 500:
-            response_str = response_str[:500] + "...[truncated]"
+            # Truncate long responses
+            response_str = str(tool_response)
+            if len(response_str) > 500:
+                response_str = response_str[:500] + "...[truncated]"
 
-        response = redact_sensitive_data(response_str)
+            response = redact_sensitive_data(response_str)
 
-        _session_logger.info(
-            f"POST_TOOL_USE tool={tool_name} tool_use_id={tool_use_id} "
-            f"response={response}"
-        )
+            _session_logger.info(
+                f"POST_TOOL_USE tool={tool_name} tool_use_id={tool_use_id} "
+                f"response={response}"
+            )
+    except Exception:
+        pass  # Don't let logging errors break the session
 
     return {}
 
@@ -359,15 +407,18 @@ async def user_prompt_logger(
     Returns:
         Empty dict to allow the operation (just logging, no blocking)
     """
-    if _session_logger:
-        prompt = input_data.get("prompt", "")
-        prompt = redact_sensitive_data(prompt)
+    try:
+        if _session_logger:
+            prompt = input_data.get("prompt", "")
+            prompt = redact_sensitive_data(prompt)
 
-        # Truncate long prompts
-        if len(prompt) > 200:
-            prompt = prompt[:200] + "...[truncated]"
+            # Truncate long prompts
+            if len(prompt) > 200:
+                prompt = prompt[:200] + "...[truncated]"
 
-        _session_logger.info(f'USER_PROMPT prompt="{prompt}"')
+            _session_logger.info(f'USER_PROMPT prompt="{prompt}"')
+    except Exception:
+        pass  # Don't let logging errors break the session
 
     return {}
 
@@ -389,7 +440,48 @@ async def session_stop_logger(
     Returns:
         Empty dict to allow the operation (just logging, no blocking)
     """
-    log_session_end()
+    try:
+        log_session_end()
+    except Exception:
+        pass  # Don't let logging errors break the session
+
+    return {}
+
+
+async def subagent_stop_logger(
+    input_data: dict[str, Any],
+    tool_use_id: str | None,
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Log subagent completion.
+
+    This is an SDK hook callback that logs when a subagent finishes.
+
+    Args:
+        input_data: Hook input data containing session_id, transcript_path
+        tool_use_id: Unique identifier
+        context: Hook context
+
+    Returns:
+        Empty dict to allow the operation
+    """
+    try:
+        session_id = str(input_data.get("session_id", "unknown") or "unknown")
+        transcript_path = str(input_data.get("transcript_path", "") or "")
+
+        # Visual indicator for subagent completion (testing)
+        session_short = session_id[:8] if len(session_id) >= 8 else session_id
+        print(f"✅ [SUBAGENT] Completed (session: {session_short}...)")
+        print()
+
+        if _session_logger:
+            _session_logger.info(
+                f"SUBAGENT_STOP session_id={session_id} "
+                f"transcript_path={transcript_path}"
+            )
+    except Exception:
+        pass  # Don't let logging errors break the session
+
     return {}
 
 
