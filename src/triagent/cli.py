@@ -18,12 +18,10 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from triagent import __version__
-from triagent.commands.config import config_command
-from triagent.commands.help import help_command
-from triagent.commands.init import init_command
-from triagent.commands.persona import persona_command
-from triagent.commands.team import team_command
+from triagent.cli_layer.adapters import CLIOutputAdapter, CLIPromptAdapter
 from triagent.commands.team_report import team_report_command
+from triagent.core.commands import execute_command, get_command
+from triagent.core.commands.base import CommandContext
 from triagent.config import ConfigManager, get_config_manager
 from triagent.sdk_client import create_sdk_client
 from triagent.session_logger import (
@@ -34,11 +32,6 @@ from triagent.session_logger import (
 from triagent.skills import get_available_personas
 from triagent.teams.config import get_team_config
 from triagent.utils.windows import find_git_bash, is_windows
-from triagent.versions import (
-    AZURE_EXTENSION_VERSIONS,
-    CLAUDE_CODE_VERSION,
-    MCP_AZURE_DEVOPS_VERSION,
-)
 from triagent.visibility.subagent_visibility import (
     show_subagent_complete,
     show_subagent_start,
@@ -240,46 +233,6 @@ def create_header(config_manager: ConfigManager) -> str:
     return f"[bold cyan]Triagent CLI v{__version__}[/bold cyan] | Team: {team_name} | Persona: {persona_display} | Project: {config.ado_project}"
 
 
-def versions_command(console: Console) -> None:
-    """Display installed and pinned tool versions."""
-    from triagent.mcp.setup import (
-        check_azure_cli_installed,
-        check_claude_code_installed,
-        check_nodejs_installed,
-    )
-
-    console.print()
-    console.print("[bold cyan]Triagent Tool Versions[/bold cyan]")
-    console.print()
-
-    # Triagent version
-    console.print(f"  [bold]Triagent CLI:[/bold]         v{__version__}")
-    console.print()
-
-    # Detected installed versions
-    console.print("[bold]Installed Tools:[/bold]")
-    az_installed, az_version = check_azure_cli_installed()
-    node_installed, node_version = check_nodejs_installed()
-    claude_installed, claude_version = check_claude_code_installed()
-
-    az_display = az_version if az_installed else "[red]Not installed[/red]"
-    node_display = node_version if node_installed else "[red]Not installed[/red]"
-    claude_display = claude_version if claude_installed else "[red]Not installed[/red]"
-
-    console.print(f"  Azure CLI:             {az_display}")
-    console.print(f"  Node.js:               {node_display}")
-    console.print(f"  Claude Code CLI:       {claude_display}")
-    console.print()
-
-    # Pinned versions (used by /init)
-    console.print("[bold]Pinned Versions (used by /init):[/bold]")
-    console.print(f"  Claude Code:           v{CLAUDE_CODE_VERSION}")
-    console.print(f"  MCP Azure DevOps:      v{MCP_AZURE_DEVOPS_VERSION}")
-    for ext_name, ext_version in AZURE_EXTENSION_VERSIONS.items():
-        console.print(f"  az ext {ext_name}:  v{ext_version}")
-    console.print()
-
-
 def parse_slash_command(user_input: str) -> tuple[str, list[str]]:
     """Parse a slash command from user input.
 
@@ -373,14 +326,14 @@ You are investigating {work_item_type.capitalize()} #{work_item_id}. Please foll
 """
 
 
-def handle_slash_command(
+async def handle_slash_command(
     command: str,
     args: list[str],
     console: Console,
     config_manager: ConfigManager,
     sdk_commands: list[str] | None = None,
 ) -> bool | str:
-    """Handle a slash command synchronously.
+    """Handle a slash command using the unified command system.
 
     Args:
         command: Command name (without /)
@@ -393,74 +346,46 @@ def handle_slash_command(
         True to continue, False to exit, "sdk" to forward to SDK,
         "restart" to restart session
     """
+    # Handle exit commands directly
     if command in ("exit", "quit", "q"):
         console.print("[dim]Goodbye![/dim]")
         log_session_end()  # Guard prevents duplicate logging
         return False
 
-    if command == "help":
-        help_command(console, sdk_commands=sdk_commands)
-        return True
-
-    if command == "init":
-        init_command(console, config_manager)
-        return True
-
-    if command == "config":
-        config_command(console, config_manager, args if args else None)
-        return True
-
-    if command == "team":
-        team_name = args[0] if args else None
-        team_command(console, config_manager, team_name)
-        return True
-
-    if command == "persona":
-        persona_name = args[0] if args else None
-        changed = persona_command(console, config_manager, persona_name)
-        # Return "restart" to signal SDK restart needed (special return value)
-        if changed:
-            return "restart"  # type: ignore
-        return True
-
-    if command == "clear":
-        console.print("[dim]Conversation cleared (new session on next message)[/dim]")
-        return True
-
-    if command == "versions":
-        versions_command(console)
-        return True
-
+    # Handle team-report separately (not in core commands)
     if command == "team-report":
         team_report_command(console, config_manager, args)
         return True
 
-    if command == "confirm":
-        # Toggle write operation confirmations
-        config = config_manager.load_config()
-        arg = args[0].lower() if args else ""
+    # Check if this is a known core command
+    if not get_command(command):
+        # Unknown CLI command - forward to SDK
+        return "sdk"
 
-        if arg == "off":
-            config.auto_approve_writes = True
-            config_manager.save_config(config)
-            console.print("[green]✓ Write confirmations DISABLED[/green]")
-            console.print("[dim]  ADO/Git write operations will auto-approve[/dim]")
-        elif arg == "on":
-            config.auto_approve_writes = False
-            config_manager.save_config(config)
-            console.print("[green]✓ Write confirmations ENABLED[/green]")
-            console.print("[dim]  You'll be asked to confirm write operations[/dim]")
-        else:
-            status = "[red]OFF[/red] (auto-approve)" if config.auto_approve_writes else "[green]ON[/green] (confirm)"
-            console.print(f"[bold]Write confirmations:[/bold] {status}")
-            console.print()
-            console.print("[dim]Usage: /confirm on|off[/dim]")
-            console.print("[dim]  on  - Ask for confirmation before write operations[/dim]")
-            console.print("[dim]  off - Auto-approve write operations[/dim]")
-        return True
+    # Create command context with CLI adapters
+    ctx = CommandContext(
+        config_manager=config_manager,
+        prompt=CLIPromptAdapter(console),
+        output=CLIOutputAdapter(console),
+        args=args,
+        environment="cli",
+        session_data={"sdk_commands": sdk_commands},
+    )
 
-    # Unknown CLI command - forward to SDK
-    return "sdk"
+    # Execute the command
+    result = await execute_command(command, ctx)
+
+    # Handle result flags
+    if result.should_exit:
+        return False
+
+    if result.requires_restart:
+        return "restart"
+
+    if result.should_clear:
+        console.print("[dim]Conversation cleared (new session on next message)[/dim]")
+
+    return True
 
 
 def process_sdk_message(
@@ -734,7 +659,7 @@ async def interactive_loop_async(
                     # Handle slash commands
                     if user_input.startswith("/"):
                         command, args = parse_slash_command(user_input)
-                        result = handle_slash_command(
+                        result = await handle_slash_command(
                             command, args, console, config_manager, sdk_commands
                         )
 
