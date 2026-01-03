@@ -2,14 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from triagent.skills.loader import load_persona
 from triagent.teams.config import get_team_config
-
-# Base directory for CLAUDE.md files
-CLAUDE_MD_DIR = Path(__file__).parent / "claude_md"
-
 
 BASE_SYSTEM_PROMPT = """You are Triagent, a Claude-powered assistant for Azure DevOps automation.
 
@@ -30,26 +24,6 @@ to gather the necessary details BEFORE proceeding. This is especially important 
 Do NOT make assumptions - ask clarifying questions first to ensure you have the correct context.
 
 Always be helpful, concise, and professional in your responses."""
-
-
-def get_claude_md_content(team_name: str) -> str:
-    """Load team-specific CLAUDE.md content.
-
-    Args:
-        team_name: Team identifier
-
-    Returns:
-        CLAUDE.md content for the team
-    """
-    team_config = get_team_config(team_name)
-    if not team_config:
-        return ""
-
-    claude_md_path = CLAUDE_MD_DIR / team_config.claude_md
-    if not claude_md_path.exists():
-        return ""
-
-    return claude_md_path.read_text()
 
 
 def get_system_prompt(team_name: str, persona_name: str = "developer") -> str:
@@ -128,10 +102,5 @@ def get_system_prompt(team_name: str, persona_name: str = "developer") -> str:
         for _skill_name, skill in persona.skills.items():
             if skill.content:
                 prompt_parts.append(f"\n### {skill.metadata.display_name}\n{skill.content}")
-
-    # Add team-specific CLAUDE.md content
-    claude_md = get_claude_md_content(team_name)
-    if claude_md:
-        prompt_parts.append(f"\n## Team Instructions\n{claude_md}")
 
     return "\n".join(prompt_parts)

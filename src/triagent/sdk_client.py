@@ -22,8 +22,8 @@ from triagent.config import ConfigManager
 from triagent.hooks import get_triagent_hooks
 from triagent.mcp.tools import create_triagent_mcp_server
 from triagent.permissions import TriagentPermissionHandler
-from triagent.prompts.system import get_system_prompt
 from triagent.skills.loader import load_persona
+from triagent.skills.system import get_system_prompt
 from triagent.utils.windows import get_git_bash_env, is_windows
 from triagent.versions import MCP_AZURE_DEVOPS_VERSION
 

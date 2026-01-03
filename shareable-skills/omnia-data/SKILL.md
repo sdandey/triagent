@@ -1,6 +1,32 @@
+---
+name: omnia-data
+description: |
+  Omnia Data team context and reference. Use this skill when:
+  - Working with Azure DevOps repositories in Audit Cortex 2
+  - Querying telemetry (App Insights, Log Analytics)
+  - Looking up release pipeline patterns and naming conventions
+  - Mapping CloudRoleName/service names to repositories
+  - Finding team structure and area paths
+  - Writing Kusto queries for exception analysis
+  Invoke with: /omnia-data
+version: 1.0.0
+---
+
 # Omnia Data Team Instructions
 
+## How to Use This Skill
+
+This skill provides comprehensive reference information for the Omnia Data team. Use the tables and patterns below to:
+- Look up telemetry workspace IDs before querying logs
+- Identify the correct Azure subscription for each region
+- Find repository ownership and top contributors
+- Understand release pipeline naming conventions
+- Use Kusto query templates for investigation
+
+---
+
 ## Project Context
+
 You are assisting the Omnia Data team with Azure DevOps operations in the Audit Cortex 2 project.
 
 ## Azure DevOps Repositories
@@ -702,4 +728,3 @@ Audit Cortex 2
 | Core Data Engineering | `Audit Cortex 2\Omnia Data\Core Data Engineering` |
 | Health Monitoring | `Audit Cortex 2\Omnia Data\Health Monitoring` |
 | SpaceBots | `Audit Cortex 2\Omnia Data\SpaceBots` |
-

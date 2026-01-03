@@ -14,7 +14,6 @@ class TeamConfig:
     display_name: str
     ado_project: str
     ado_organization: str
-    claude_md: str
     description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -24,7 +23,6 @@ class TeamConfig:
             "display_name": self.display_name,
             "ado_project": self.ado_project,
             "ado_organization": self.ado_organization,
-            "claude_md": self.claude_md,
             "description": self.description,
         }
 
@@ -36,7 +34,6 @@ TEAM_CONFIG: dict[str, TeamConfig] = {
         display_name="Levvia",
         ado_project="Project Omnia",
         ado_organization="symphonyvsts",
-        claude_md="levvia.md",
         description="Levvia team configuration",
     ),
     "omnia": TeamConfig(
@@ -44,7 +41,6 @@ TEAM_CONFIG: dict[str, TeamConfig] = {
         display_name="Omnia",
         ado_project="Project Omnia",
         ado_organization="symphonyvsts",
-        claude_md="omnia.md",
         description="Omnia team configuration",
     ),
     "omnia-data": TeamConfig(
@@ -52,7 +48,6 @@ TEAM_CONFIG: dict[str, TeamConfig] = {
         display_name="Omnia Data",
         ado_project="Audit Cortex 2",
         ado_organization="symphonyvsts",
-        claude_md="omnia_data.md",
         description="Omnia Data team configuration",
     ),
 }

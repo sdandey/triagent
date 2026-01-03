@@ -240,10 +240,15 @@ def load_persona(team: str, persona_name: str) -> LoadedPersona | None:
     skills: dict[str, SkillDefinition] = {}
     subagents: dict[str, SubagentConfig] = {}
 
-    # Load core skills
-    core_dir = SKILLS_DIR / "core"
+    # Load core skills (team-specific first, then global fallback)
+    team_core_dir = SKILLS_DIR / team / "core"
+    global_core_dir = SKILLS_DIR / "core"
     for skill_name in definition.core_skills:
-        skill_path = core_dir / f"{skill_name}.md"
+        # Try team-specific core first
+        skill_path = team_core_dir / f"{skill_name}.md"
+        if not skill_path.exists():
+            # Fall back to global core
+            skill_path = global_core_dir / f"{skill_name}.md"
         skill = load_skill(skill_path)
         if skill:
             skills[skill_name] = skill
@@ -257,7 +262,7 @@ def load_persona(team: str, persona_name: str) -> LoadedPersona | None:
             skills[skill_name] = skill
 
     # Load subagents from core
-    core_subagents_dir = core_dir / "_subagents"
+    core_subagents_dir = global_core_dir / "_subagents"
     if core_subagents_dir.exists():
         for subagent_file in core_subagents_dir.glob("*.yaml"):
             subagent = load_subagent(subagent_file)

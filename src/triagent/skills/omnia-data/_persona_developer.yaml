@@ -6,6 +6,8 @@ description: "Code review, PR management, release investigation"
 core_skills:
   - ado_basics
   - telemetry_basics
+  - ado_lsi_defect
+  - team_context
 
 skills:
   - dotnet_code_review

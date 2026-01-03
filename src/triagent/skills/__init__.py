@@ -37,6 +37,7 @@ from .models import (
     SubagentConfig,
     detect_code_reviewer,
 )
+from .system import get_system_prompt
 
 __all__ = [
     # Models
@@ -51,6 +52,8 @@ __all__ = [
     "load_persona",
     "get_available_personas",
     "parse_frontmatter",
+    # System prompt
+    "get_system_prompt",
     # Language detection
     "FILE_EXTENSION_MAP",
     "detect_code_reviewer",

@@ -6,6 +6,8 @@ description: "Telemetry analysis, RCA, ADO work items"
 core_skills:
   - ado_basics
   - telemetry_basics
+  - ado_lsi_defect
+  - team_context
 
 skills:
   - telemetry_investigation

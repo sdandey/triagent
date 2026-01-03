@@ -2,14 +2,15 @@
 name: lsi_creation
 display_name: "LSI Creation"
 description: "Create and manage Live Site Incidents (LSI) for production issues"
-version: "1.0.0"
+version: "1.1.0"
 tags: [lsi, incident, production, support]
-requires: [ado_basics, telemetry_basics]
-subagents: []
+requires: [ado_basics, telemetry_basics, ado_lsi_defect]
+subagents: [ado-work-item-manager]
 tools:
-  - mcp__azure-devops__create_work_item
-  - mcp__azure-devops__update_work_item
-  - mcp__azure-devops__manage_work_item_link
+  - Bash
+  - Read
+  - Write
+  - AskUserQuestion
 triggers:
   - "create.*lsi"
   - "live site"
@@ -18,6 +19,9 @@ triggers:
 ---
 
 ## Live Site Incident (LSI) Management
+
+> **Note**: This skill extends the `ado_lsi_defect` core skill with LSI-specific workflows.
+> Refer to `ado_lsi_defect` for detailed field mappings, HTML templates, and REST API workflows.
 
 ### When to Create an LSI
 
@@ -28,69 +32,60 @@ Create an LSI when:
 - Security incidents occur
 - SLA breaches happen
 
+### LSI-Specific Title Format
+
+```
+[REGION ENV] Service | LSI: Issue Summary
+```
+
+Examples:
+- `[AME PRD] WorkpaperService | LSI: OutOfMemoryException during purge`
+- `[EMA PRD] EngagementService | LSI: API Timeouts exceeding 30s`
+
 ### LSI Required Fields
 
-| Field | Description | Example |
-|-------|-------------|---------|
-| Title | "LSI: [Service] - [Issue]" | "LSI: EngagementService - API Timeouts" |
-| Type | Bug or appropriate work item type | Bug |
-| Severity | 1-Critical, 2-High, 3-Medium | 1 - Critical |
-| Priority | 1-Critical, 2-High, 3-Medium, 4-Low | 1 |
-| Area Path | Team area | Audit Cortex 2\Omnia Data |
-| Tags | "LSI", environment, service | "LSI, PRD, EngagementService" |
+See `ado_lsi_defect` core skill for complete field reference. Key LSI-specific fields:
 
-### LSI Description Template
-
-```markdown
-## Incident Summary
-[Brief description of the production issue]
-
-## Detection
-- **Time Detected**: [Timestamp UTC]
-- **Detection Method**: [Monitoring alert / User report / etc.]
-- **Reporter**: [Name/Team]
-
-## Impact Assessment
-- **Severity**: [1-Critical / 2-High / 3-Medium / 4-Low]
-- **Affected Services**: [List of services]
-- **Affected Environments**: [PRD / STG / etc.]
-- **User Impact**: [Description of user-facing impact]
-- **Estimated Users Affected**: [Number or percentage]
-
-## Current Status
-- **Status**: [Investigating / Mitigating / Resolved]
-- **Assigned To**: [On-call engineer / Team]
-
-## Timeline
-| Time (UTC) | Event |
-|------------|-------|
-| [Time] | Issue detected |
-| [Time] | Investigation started |
-| [Time] | Root cause identified |
-| [Time] | Mitigation applied |
-| [Time] | Issue resolved |
-
-## Technical Details
-[Include relevant error messages, stack traces, or telemetry data]
-
-## Mitigation Steps
-1. [Step taken to mitigate]
-2. [Additional steps]
-
-## Root Cause (if known)
-[Brief explanation, full RCA to follow]
-
-## Action Items
-- [ ] [Post-incident action]
-- [ ] [Create RCA document]
-- [ ] [Update monitoring/alerts]
-```
+| Field | Value |
+|-------|-------|
+| **Severity** | Usually `1 - Critical` or `2 - High` |
+| **Parent Epic** | 5150584 (Live Site Incidents \| 2025) |
+| **Tags** | Include "LSI" tag |
 
 ### LSI Workflow
 
 1. **Create LSI** immediately upon production issue detection
+   - Use `ado_lsi_defect` skill for work item creation
+   - Always link to Live Site Incidents Epic (5150584)
+
 2. **Update Status** as investigation progresses
-3. **Link Related Items** (defects, deployments, etc.)
+   - Add timeline comments
+   - Update Description with findings
+
+3. **Link Related Items**
+   - Defects created for fixes
+   - Related deployments
+   - RCA documents
+
 4. **Document Timeline** with key events
+   - Detection time
+   - Investigation milestones
+   - Resolution time
+
 5. **Close LSI** after issue is resolved
+   - Update state to Resolved/Closed
+   - Ensure all acceptance criteria met
+
 6. **Create RCA** work item linked to LSI
+   - Link as Related work item
+
+### Quick LSI Creation Command
+
+When user says "create LSI for {service}", follow this workflow:
+
+1. Gather telemetry data for the service
+2. Prompt for missing required fields (see `ado_lsi_defect`)
+3. Auto-populate team fields based on service
+4. Create work item with HTML formatting
+5. Link to LSI Epic (5150584)
+6. Display created work item details

@@ -21,7 +21,6 @@ class TestTeamConfig:
             assert config.display_name
             assert config.ado_project
             assert config.ado_organization
-            assert config.claude_md
 
 
 class TestGetTeamConfig:
