@@ -13,15 +13,22 @@ class ConfirmCommand(Command):
     aliases = []
 
     async def execute(self, ctx: CommandContext) -> CommandResult:
-        """Toggle the write confirmation setting."""
+        """Toggle the write confirmation setting.
+
+        Note: auto_approve_writes=True means confirmations are DISABLED.
+        We toggle this value and show appropriate message.
+        """
         config = ctx.config_manager.load_config()
 
-        # Toggle the setting
-        new_value = not config.require_write_confirmation
-        config.require_write_confirmation = new_value
+        # Toggle the auto_approve_writes setting
+        # auto_approve_writes=True means skip confirmations (confirmations disabled)
+        # auto_approve_writes=False means require confirmations (confirmations enabled)
+        config.auto_approve_writes = not config.auto_approve_writes
         ctx.config_manager.save_config(config)
 
-        if new_value:
+        confirmations_enabled = not config.auto_approve_writes
+
+        if confirmations_enabled:
             await ctx.output.show_panel(
                 "Write confirmations are now **enabled**.\n\n"
                 "You will be prompted before any write operations "
@@ -40,7 +47,7 @@ class ConfirmCommand(Command):
 
         return CommandResult(
             success=True,
-            data={"require_write_confirmation": new_value},
+            data={"confirmations_enabled": confirmations_enabled},
         )
 
 

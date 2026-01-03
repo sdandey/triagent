@@ -44,9 +44,9 @@ class ConfigCommand(Command):
 
             # Preferences
             pref_items = [
-                ("Write Confirmations", "enabled" if config.require_write_confirmation else "disabled"),
-                ("Markdown Mode", "enabled" if config.markdown_mode else "disabled"),
-                ("Verbose Mode", "enabled" if config.verbose_mode else "disabled"),
+                ("Write Confirmations", "disabled" if config.auto_approve_writes else "enabled"),
+                ("Markdown Mode", "enabled" if config.markdown_format else "disabled"),
+                ("Verbose Mode", "enabled" if config.verbose else "disabled"),
             ]
             await ctx.output.show_key_value(pref_items, title="Preferences")
 
@@ -71,9 +71,9 @@ class ConfigCommand(Command):
 
         # Boolean settings
         bool_settings = {
-            "confirm": "require_write_confirmation",
-            "markdown": "markdown_mode",
-            "verbose": "verbose_mode",
+            "confirm": "auto_approve_writes",
+            "markdown": "markdown_format",
+            "verbose": "verbose",
         }
 
         if key in bool_settings:
