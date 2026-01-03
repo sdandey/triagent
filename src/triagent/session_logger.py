@@ -410,3 +410,84 @@ def log_permission_decision(
         if reason:
             msg += f' reason="{reason}"'
         _session_logger.info(msg)
+
+
+# Subagent Logging Functions
+
+
+def log_subagent_start(
+    subagent_name: str,
+    description: str,
+    trigger: str,
+    context: dict[str, Any] | None = None,
+) -> None:
+    """Log when a subagent is invoked.
+
+    Args:
+        subagent_name: The subagent identifier (e.g., "csharp-code-reviewer")
+        description: Human-readable description (e.g., "C# Code Reviewer")
+        trigger: What triggered the selection (e.g., "PR #123 file extensions")
+        context: Additional context (files analyzed, etc.)
+    """
+    if _session_logger:
+        ctx_str = ""
+        if context:
+            ctx_str = " " + " ".join(f"{k}={v}" for k, v in context.items())
+        _session_logger.info(
+            f'SUBAGENT_START subagent={subagent_name} '
+            f'description="{description}" trigger="{trigger}"{ctx_str}'
+        )
+
+
+def log_subagent_complete(
+    subagent_name: str,
+    duration_ms: int,
+    result_summary: str,
+) -> None:
+    """Log when a subagent completes.
+
+    Args:
+        subagent_name: The subagent identifier
+        duration_ms: Duration of the subagent execution in milliseconds
+        result_summary: Brief summary of the result
+    """
+    if _session_logger:
+        _session_logger.info(
+            f'SUBAGENT_COMPLETE subagent={subagent_name} '
+            f'duration_ms={duration_ms} result="{result_summary}"'
+        )
+
+
+def log_subagent_error(
+    subagent_name: str,
+    error: str,
+) -> None:
+    """Log when a subagent encounters an error.
+
+    Args:
+        subagent_name: The subagent identifier
+        error: Error message
+    """
+    if _session_logger:
+        _session_logger.error(
+            f'SUBAGENT_ERROR subagent={subagent_name} error="{error}"'
+        )
+
+
+def log_subagent_detected(
+    extensions: list[str],
+    matched_subagent: str,
+    confidence: str = "high",
+) -> None:
+    """Log language/type detection for auto-routing.
+
+    Args:
+        extensions: File extensions that were analyzed
+        matched_subagent: The subagent selected based on detection
+        confidence: Detection confidence level
+    """
+    if _session_logger:
+        _session_logger.debug(
+            f'SUBAGENT_DETECTED extensions={extensions} '
+            f'matched_subagent={matched_subagent} confidence={confidence}'
+        )

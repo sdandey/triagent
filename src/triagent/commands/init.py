@@ -23,6 +23,7 @@ from triagent.mcp.setup import (
     run_azure_login,
     setup_mcp_servers,
 )
+from triagent.skills import get_available_personas
 from triagent.teams.config import TEAM_CONFIG, get_team_config
 from triagent.utils.environment import get_environment_type, is_docker
 from triagent.utils.windows import find_git_bash, is_windows
@@ -163,13 +164,16 @@ def init_command(console: Console, config_manager: ConfigManager) -> bool:
     if config is None:
         return False
 
-    # Step 3: MCP Server Setup
+    # Step 3: Persona Selection
+    config = _step_persona_selection(console, config_manager, config)
+
+    # Step 4: MCP Server Setup
     _step_mcp_setup(console, config_manager, config)
 
-    # Step 4: Azure Authentication (fail gracefully if az not found)
+    # Step 5: Azure Authentication (fail gracefully if az not found)
     _step_azure_auth(console, config_manager, report)
 
-    # Step 5: Prerequisites Check (display-only, skip Claude Code in Docker)
+    # Step 6: Prerequisites Check (display-only, skip Claude Code in Docker)
     _step_prerequisites(console, report, skip_claude_code=is_docker())
 
     # Save configuration
@@ -186,7 +190,7 @@ def init_command(console: Console, config_manager: ConfigManager) -> bool:
 def _step_azure_auth(
     console: Console, config_manager: ConfigManager, report: InitReport
 ) -> bool:
-    """Step 4: Azure Authentication.
+    """Step 5: Azure Authentication.
 
     This step is non-blocking - failures are logged to report but setup continues.
     If Azure CLI is not detected, shows manual installation instructions.
@@ -199,7 +203,7 @@ def _step_azure_auth(
     Returns:
         True (always continues to next step)
     """
-    console.print("[bold]Step 4/5: Azure Authentication[/bold]")
+    console.print("[bold]Step 5/6: Azure Authentication[/bold]")
     console.print("-" * 40)
     console.print()
 
@@ -251,7 +255,7 @@ def _step_azure_auth(
             else:
                 console.print("[yellow]⚠[/yellow] Authentication failed (will continue)")
                 report.add_failure(
-                    step="Step 4/5",
+                    step="Step 5/6",
                     component="Azure Authentication",
                     error="Failed to get account info after login",
                     manual_fix="az login",
@@ -259,7 +263,7 @@ def _step_azure_auth(
         else:
             console.print("[yellow]⚠[/yellow] Azure login failed (will continue)")
             report.add_failure(
-                step="Step 4/5",
+                step="Step 5/6",
                 component="Azure Authentication",
                 error="Azure login command failed",
                 manual_fix="az login",
@@ -281,7 +285,7 @@ def _step_api_provider(
     config_manager: ConfigManager,
 ) -> TriagentCredentials | None:
     """Step 1: API Provider selection and configuration."""
-    console.print("[bold]Step 1/5: Claude API Provider[/bold]")
+    console.print("[bold]Step 1/6: Claude API Provider[/bold]")
     console.print("-" * 40)
 
     credentials = config_manager.load_credentials()
@@ -445,7 +449,7 @@ def _step_team_selection(
     config_manager: ConfigManager,
 ) -> TriagentConfig | None:
     """Step 2: Team Selection."""
-    console.print("[bold]Step 2/5: Team Selection[/bold]")
+    console.print("[bold]Step 2/6: Team Selection[/bold]")
     console.print("-" * 40)
 
     config = config_manager.load_config()
@@ -485,13 +489,73 @@ def _step_team_selection(
     return config
 
 
+def _step_persona_selection(
+    console: Console,
+    config_manager: ConfigManager,
+    config: TriagentConfig,
+) -> TriagentConfig:
+    """Step 3: Persona Selection.
+
+    Allows users to select their persona (Developer or Support) which
+    determines the skills and subagents loaded for their session.
+
+    Args:
+        console: Rich console for output
+        config_manager: Config manager instance
+        config: Current configuration
+
+    Returns:
+        Updated configuration with persona set
+    """
+    console.print("[bold]Step 3/6: Persona Selection[/bold]")
+    console.print("-" * 40)
+
+    # Get available personas for the selected team
+    personas = get_available_personas(config.team)
+
+    if not personas:
+        # No personas defined for this team, use default
+        console.print("[dim]No personas defined for this team. Using default.[/dim]")
+        console.print()
+        return config
+
+    console.print("Select your persona:")
+    console.print()
+
+    for i, persona in enumerate(personas, 1):
+        current = " [green](current)[/green]" if persona.name == config.persona else ""
+        console.print(f"  {i}. {persona.display_name} - {persona.description}{current}")
+
+    console.print()
+
+    while True:
+        try:
+            choice = input(f"Enter persona number (1-{len(personas)}): ").strip()
+            idx = int(choice) - 1
+            if 0 <= idx < len(personas):
+                break
+            console.print("[red]Invalid selection[/red]")
+        except ValueError:
+            console.print("[red]Please enter a number[/red]")
+
+    selected_persona = personas[idx]
+    config.persona = selected_persona.name
+
+    console.print()
+    console.print(f"[green]✓[/green] Selected persona: {selected_persona.display_name}")
+    console.print(f"    {selected_persona.description}")
+    console.print()
+
+    return config
+
+
 def _step_mcp_setup(
     console: Console,
     config_manager: ConfigManager,
     config: TriagentConfig,
 ) -> None:
-    """Step 3: MCP Server Setup."""
-    console.print("[bold]Step 3/5: Azure DevOps MCP Server[/bold]")
+    """Step 4: MCP Server Setup."""
+    console.print("[bold]Step 4/6: Azure DevOps MCP Server[/bold]")
     console.print("-" * 40)
 
     with Progress(
@@ -515,7 +579,7 @@ def _step_prerequisites(
     report: InitReport,
     skip_claude_code: bool = False,
 ) -> None:
-    """Step 5: Prerequisites Check (display-only, no auto-install).
+    """Step 6: Prerequisites Check (display-only, no auto-install).
 
     This step checks for required prerequisites and displays manual
     installation instructions if any are missing. No auto-installation.
@@ -527,7 +591,7 @@ def _step_prerequisites(
     """
     import os
 
-    console.print("[bold]Step 5/5: Prerequisites Check[/bold]")
+    console.print("[bold]Step 6/6: Prerequisites Check[/bold]")
     console.print("-" * 40)
     console.print()
 
@@ -679,11 +743,20 @@ def _show_completion(
     credentials = config_manager.load_credentials()
     provider_name = dict(API_PROVIDERS).get(credentials.api_provider, credentials.api_provider)
 
+    # Get persona display name
+    personas = get_available_personas(config.team)
+    persona_display = config.persona.title()
+    for p in personas:
+        if p.name == config.persona:
+            persona_display = p.display_name
+            break
+
     console.print(
         Panel(
             f"[bold green]Setup Complete![/bold green]\n\n"
             f"[bold]Config saved to:[/bold] {config_manager.config_file}\n"
             f"[bold]Team:[/bold] {team_name}\n"
+            f"[bold]Persona:[/bold] {persona_display}\n"
             f"[bold]ADO Project:[/bold] {config.ado_project}\n"
             f"[bold]API Provider:[/bold] {provider_name}\n"
             f"[bold]MCP Servers:[/bold] Azure DevOps\n\n"
