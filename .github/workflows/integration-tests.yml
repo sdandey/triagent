@@ -1,0 +1,133 @@
+# Integration Tests Workflow
+#
+# Runs integration tests in two stages:
+# 1. Local integration tests using testcontainers (on every push/PR)
+# 2. Azure sandbox integration tests (on push to main only)
+
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev,web]"
+
+      - name: Run unit tests
+        run: pytest tests/web/ -v --tb=short
+
+  local-integration:
+    name: Local Integration Tests (Testcontainers)
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev,web,test-integration]"
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --tb=short
+
+  azure-integration:
+    name: Azure Sandbox Integration Tests
+    runs-on: ubuntu-latest
+    needs: local-integration
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev,web,test-integration]"
+
+      - name: Deploy to Staging
+        run: ./scripts/deploy-sandbox.sh --slot staging
+
+      - name: Run Azure Integration Tests
+        env:
+          TRIAGENT_SANDBOX_URL: https://triagent-sandbox-app-staging.azurewebsites.net
+          TRIAGENT_SANDBOX_API_KEY: ${{ secrets.TRIAGENT_SANDBOX_API_KEY }}
+        run: pytest tests/azure/ -v --tb=short
+
+      - name: Swap to Production
+        if: success()
+        run: |
+          az webapp deployment slot swap \
+            --name triagent-sandbox-app \
+            --resource-group triagent-sandbox-rg \
+            --slot staging \
+            --target-slot production
+
+  e2e-tests:
+    name: Playwright E2E Tests
+    runs-on: ubuntu-latest
+    needs: azure-integration
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev,web,test-web]"
+
+      - name: Install Playwright browsers
+        run: playwright install chromium
+
+      - name: Run E2E tests
+        env:
+          TRIAGENT_TEST_URL: https://triagent-sandbox-app.azurewebsites.net
+          TRIAGENT_API_URL: https://triagent-sandbox-app.azurewebsites.net
+        run: pytest tests/e2e/test_web_ui.py -v --browser chromium --tb=short

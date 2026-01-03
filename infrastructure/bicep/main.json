@@ -1,0 +1,1419 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.31.92.45157",
+      "templateHash": "16265268089701524022"
+    }
+  },
+  "parameters": {
+    "namingPrefix": {
+      "type": "string",
+      "defaultValue": "triagent-sandbox",
+      "metadata": {
+        "description": "Environment name prefix for all resources"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus",
+      "metadata": {
+        "description": "Azure region for resources"
+      }
+    },
+    "appServiceSku": {
+      "type": "string",
+      "defaultValue": "S1",
+      "metadata": {
+        "description": "App Service Plan SKU"
+      }
+    },
+    "redisSku": {
+      "type": "string",
+      "defaultValue": "Standard",
+      "metadata": {
+        "description": "Redis SKU name (Basic, Standard, Premium)"
+      }
+    },
+    "maxSessions": {
+      "type": "int",
+      "defaultValue": 100,
+      "metadata": {
+        "description": "Maximum concurrent sessions in the pool"
+      }
+    },
+    "readyInstances": {
+      "type": "int",
+      "defaultValue": 5,
+      "metadata": {
+        "description": "Number of ready session instances"
+      }
+    },
+    "cooldownSeconds": {
+      "type": "int",
+      "defaultValue": 1800,
+      "metadata": {
+        "description": "Session cooldown period in seconds"
+      }
+    },
+    "imageTag": {
+      "type": "string",
+      "defaultValue": "latest",
+      "metadata": {
+        "description": "Container image tag"
+      }
+    },
+    "registryType": {
+      "type": "string",
+      "defaultValue": "placeholder",
+      "allowedValues": [
+        "placeholder",
+        "acr",
+        "ghcr"
+      ],
+      "metadata": {
+        "description": "Container registry type: placeholder (default), acr, or ghcr"
+      }
+    },
+    "ghcrImage": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "GitHub Container Registry image path (e.g., ghcr.io/owner/triagent-session)"
+      }
+    },
+    "ghcrUsername": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "GitHub username for GHCR private images"
+      }
+    },
+    "ghcrToken": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "GitHub PAT token for GHCR private images (with read:packages scope)"
+      }
+    },
+    "triagentApiKey": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "API key for simple authentication (MVP). Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+      }
+    },
+    "enableSessionPoolRole": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable Session Pool role assignment (requires Owner permissions)"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "Project": "Triagent",
+        "Environment": "Sandbox",
+        "ManagedBy": "Bicep"
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "identity-deployment",
+      "resourceGroup": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "namingPrefix": {
+            "value": "[parameters('namingPrefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.31.92.45157",
+              "templateHash": "4570695621605766922"
+            }
+          },
+          "parameters": {
+            "namingPrefix": {
+              "type": "string",
+              "metadata": {
+                "description": "Naming prefix for resources"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}-session-identity', parameters('namingPrefix'))]",
+              "location": "[parameters('location')]",
+              "tags": {
+                "Project": "Triagent",
+                "Component": "ManagedIdentity"
+              }
+            }
+          ],
+          "outputs": {
+            "identityId": {
+              "type": "string",
+              "metadata": {
+                "description": "Managed identity resource ID"
+              },
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-session-identity', parameters('namingPrefix')))]"
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Managed identity principal ID"
+              },
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-session-identity', parameters('namingPrefix'))), '2023-01-31').principalId]"
+            },
+            "clientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Managed identity client ID"
+              },
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-session-identity', parameters('namingPrefix'))), '2023-01-31').clientId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}-rg', parameters('namingPrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "acr-deployment",
+      "resourceGroup": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "namingPrefix": {
+            "value": "[parameters('namingPrefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.31.92.45157",
+              "templateHash": "15493029405780255658"
+            }
+          },
+          "parameters": {
+            "namingPrefix": {
+              "type": "string",
+              "metadata": {
+                "description": "Naming prefix for resources"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            }
+          },
+          "variables": {
+            "acrName": "[replace(format('{0}acr', parameters('namingPrefix')), '-', '')]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ContainerRegistry/registries",
+              "apiVersion": "2023-07-01",
+              "name": "[variables('acrName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "adminUserEnabled": false,
+                "networkRuleBypassOptions": "AzureServices"
+              },
+              "tags": {
+                "Project": "Triagent",
+                "Component": "ContainerRegistry"
+              }
+            }
+          ],
+          "outputs": {
+            "loginServer": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR login server URL"
+              },
+              "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), '2023-07-01').loginServer]"
+            },
+            "acrName": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR resource name"
+              },
+              "value": "[variables('acrName')]"
+            },
+            "acrId": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR resource ID"
+              },
+              "value": "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}-rg', parameters('namingPrefix')))]"
+      ]
+    },
+    {
+      "condition": "[equals(parameters('registryType'), 'acr')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "acr-pull-role-assignment",
+      "resourceGroup": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'identity-deployment'), '2022-09-01').outputs.principalId.value]"
+          },
+          "roleDefinitionId": {
+            "value": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
+          },
+          "acrName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'acr-deployment'), '2022-09-01').outputs.acrName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.31.92.45157",
+              "templateHash": "6053695363653923341"
+            }
+          },
+          "parameters": {
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID to assign the role to"
+              }
+            },
+            "roleDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Role definition ID (GUID)"
+              }
+            },
+            "acrName": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR resource name"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', parameters('acrName'))]",
+              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), parameters('principalId'), parameters('roleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('principalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', parameters('roleDefinitionId'))]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ],
+          "outputs": {
+            "roleAssignmentId": {
+              "type": "string",
+              "value": "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), parameters('principalId'), parameters('roleDefinitionId')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'acr-deployment')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'identity-deployment')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}-rg', parameters('namingPrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "loganalytics-deployment",
+      "resourceGroup": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "namingPrefix": {
+            "value": "[parameters('namingPrefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.31.92.45157",
+              "templateHash": "11144969321875096649"
+            }
+          },
+          "parameters": {
+            "namingPrefix": {
+              "type": "string",
+              "metadata": {
+                "description": "Naming prefix for resources"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            },
+            "retentionInDays": {
+              "type": "int",
+              "defaultValue": 30,
+              "metadata": {
+                "description": "Log Analytics retention in days"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2022-10-01",
+              "name": "[format('{0}-law', parameters('namingPrefix'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": "[parameters('retentionInDays')]"
+              },
+              "tags": {
+                "Project": "Triagent",
+                "Component": "LogAnalytics"
+              }
+            }
+          ],
+          "outputs": {
+            "workspaceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics Workspace ID"
+              },
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', parameters('namingPrefix')))]"
+            },
+            "customerId": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics Workspace Customer ID"
+              },
+              "value": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', parameters('namingPrefix'))), '2022-10-01').customerId]"
+            },
+            "primarySharedKey": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics Workspace Primary Key"
+              },
+              "value": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', parameters('namingPrefix'))), '2022-10-01').primarySharedKey]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}-rg', parameters('namingPrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "appinsights-deployment",
+      "resourceGroup": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "namingPrefix": {
+            "value": "[parameters('namingPrefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "logAnalyticsWorkspaceId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'loganalytics-deployment'), '2022-09-01').outputs.workspaceId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.31.92.45157",
+              "templateHash": "62348412241428032"
+            }
+          },
+          "parameters": {
+            "namingPrefix": {
+              "type": "string",
+              "metadata": {
+                "description": "Naming prefix for resources"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            },
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics Workspace ID for Application Insights"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[format('{0}-appinsights', parameters('namingPrefix'))]",
+              "location": "[parameters('location')]",
+              "kind": "web",
+              "properties": {
+                "Application_Type": "web",
+                "Flow_Type": "Bluefield",
+                "Request_Source": "rest",
+                "WorkspaceResourceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "IngestionMode": "LogAnalytics",
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              },
+              "tags": {
+                "Project": "Triagent",
+                "Component": "ApplicationInsights"
+              }
+            }
+          ],
+          "outputs": {
+            "instrumentationKey": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights Instrumentation Key"
+              },
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-appinsights', parameters('namingPrefix'))), '2020-02-02').InstrumentationKey]"
+            },
+            "connectionString": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights Connection String"
+              },
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-appinsights', parameters('namingPrefix'))), '2020-02-02').ConnectionString]"
+            },
+            "appInsightsId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights resource ID"
+              },
+              "value": "[resourceId('Microsoft.Insights/components', format('{0}-appinsights', parameters('namingPrefix')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'loganalytics-deployment')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}-rg', parameters('namingPrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "cae-deployment",
+      "resourceGroup": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "namingPrefix": {
+            "value": "[parameters('namingPrefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "logAnalyticsCustomerId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'loganalytics-deployment'), '2022-09-01').outputs.customerId.value]"
+          },
+          "logAnalyticsPrimaryKey": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'loganalytics-deployment'), '2022-09-01').outputs.primarySharedKey.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.31.92.45157",
+              "templateHash": "3857545246061547968"
+            }
+          },
+          "parameters": {
+            "namingPrefix": {
+              "type": "string",
+              "metadata": {
+                "description": "Naming prefix for resources"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            },
+            "logAnalyticsCustomerId": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics Workspace Customer ID"
+              }
+            },
+            "logAnalyticsPrimaryKey": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Log Analytics Workspace Primary Key"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}-cae', parameters('namingPrefix'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[parameters('logAnalyticsCustomerId')]",
+                    "sharedKey": "[parameters('logAnalyticsPrimaryKey')]"
+                  }
+                },
+                "workloadProfiles": [
+                  {
+                    "name": "Consumption",
+                    "workloadProfileType": "Consumption"
+                  }
+                ]
+              },
+              "tags": {
+                "Project": "Triagent",
+                "Component": "ContainerAppsEnvironment"
+              }
+            }
+          ],
+          "outputs": {
+            "environmentId": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps Environment ID"
+              },
+              "value": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-cae', parameters('namingPrefix')))]"
+            },
+            "defaultDomain": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps Environment Default Domain"
+              },
+              "value": "[reference(resourceId('Microsoft.App/managedEnvironments', format('{0}-cae', parameters('namingPrefix'))), '2024-03-01').defaultDomain]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'loganalytics-deployment')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}-rg', parameters('namingPrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "sessionpool-deployment",
+      "resourceGroup": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "namingPrefix": {
+            "value": "[parameters('namingPrefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "environmentId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'cae-deployment'), '2022-09-01').outputs.environmentId.value]"
+          },
+          "managedIdentityId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'identity-deployment'), '2022-09-01').outputs.identityId.value]"
+          },
+          "maxSessions": {
+            "value": "[parameters('maxSessions')]"
+          },
+          "readyInstances": {
+            "value": "[parameters('readyInstances')]"
+          },
+          "cooldownSeconds": {
+            "value": "[parameters('cooldownSeconds')]"
+          },
+          "imageTag": {
+            "value": "[parameters('imageTag')]"
+          },
+          "registryType": {
+            "value": "[parameters('registryType')]"
+          },
+          "acrLoginServer": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'acr-deployment'), '2022-09-01').outputs.loginServer.value]"
+          },
+          "ghcrImage": {
+            "value": "[parameters('ghcrImage')]"
+          },
+          "ghcrUsername": {
+            "value": "[parameters('ghcrUsername')]"
+          },
+          "ghcrToken": {
+            "value": "[parameters('ghcrToken')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.31.92.45157",
+              "templateHash": "4757933142214791603"
+            }
+          },
+          "parameters": {
+            "namingPrefix": {
+              "type": "string",
+              "metadata": {
+                "description": "Naming prefix for resources"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            },
+            "environmentId": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps Environment ID"
+              }
+            },
+            "managedIdentityId": {
+              "type": "string",
+              "metadata": {
+                "description": "User-assigned managed identity resource ID"
+              }
+            },
+            "maxSessions": {
+              "type": "int",
+              "defaultValue": 100,
+              "metadata": {
+                "description": "Maximum concurrent sessions"
+              }
+            },
+            "readyInstances": {
+              "type": "int",
+              "defaultValue": 5,
+              "metadata": {
+                "description": "Number of ready session instances"
+              }
+            },
+            "cooldownSeconds": {
+              "type": "int",
+              "defaultValue": 1800,
+              "metadata": {
+                "description": "Session cooldown period in seconds"
+              }
+            },
+            "maxAliveSeconds": {
+              "type": "int",
+              "defaultValue": 7200,
+              "metadata": {
+                "description": "Maximum session alive period in seconds (max 7200 = 2 hours)"
+              }
+            },
+            "imageTag": {
+              "type": "string",
+              "defaultValue": "latest",
+              "metadata": {
+                "description": "Container image tag"
+              }
+            },
+            "registryType": {
+              "type": "string",
+              "defaultValue": "placeholder",
+              "allowedValues": [
+                "placeholder",
+                "acr",
+                "ghcr"
+              ],
+              "metadata": {
+                "description": "Container registry type: placeholder, acr, or ghcr"
+              }
+            },
+            "acrLoginServer": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "ACR login server URL (required if registryType is acr)"
+              }
+            },
+            "ghcrImage": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "GitHub Container Registry image (e.g., ghcr.io/owner/repo)"
+              }
+            },
+            "ghcrUsername": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "GitHub username for GHCR (required for private images)"
+              }
+            },
+            "ghcrToken": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "GitHub PAT for GHCR (required for private images)"
+              }
+            }
+          },
+          "variables": {
+            "containerImage": "[if(equals(parameters('registryType'), 'placeholder'), 'mcr.microsoft.com/k8se/quickstart:latest', if(equals(parameters('registryType'), 'acr'), format('{0}/triagent-session:{1}', parameters('acrLoginServer'), parameters('imageTag')), format('{0}:{1}', parameters('ghcrImage'), parameters('imageTag'))))]",
+            "useAcrCredentials": "[equals(parameters('registryType'), 'acr')]",
+            "useGhcrCredentials": "[and(equals(parameters('registryType'), 'ghcr'), not(empty(parameters('ghcrToken'))))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/sessionPools",
+              "apiVersion": "2025-01-01",
+              "name": "[format('{0}-session-pool', parameters('namingPrefix'))]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', parameters('managedIdentityId'))]": {}
+                }
+              },
+              "properties": {
+                "containerType": "CustomContainer",
+                "poolManagementType": "Dynamic",
+                "environmentId": "[parameters('environmentId')]",
+                "customContainerTemplate": {
+                  "containers": [
+                    {
+                      "name": "triagent-session",
+                      "image": "[variables('containerImage')]",
+                      "resources": {
+                        "cpu": "[json('1.0')]",
+                        "memory": "2Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "TRIAGENT_SESSION_MODE",
+                          "value": "true"
+                        },
+                        {
+                          "name": "PORT",
+                          "value": "8080"
+                        }
+                      ]
+                    }
+                  ],
+                  "ingress": {
+                    "targetPort": 8080
+                  },
+                  "registryCredentials": "[if(variables('useAcrCredentials'), createObject('server', parameters('acrLoginServer'), 'identity', parameters('managedIdentityId')), if(variables('useGhcrCredentials'), createObject('server', 'ghcr.io', 'username', parameters('ghcrUsername'), 'passwordSecretRef', 'ghcr-token'), null()))]"
+                },
+                "scaleConfiguration": {
+                  "maxConcurrentSessions": "[parameters('maxSessions')]",
+                  "readySessionInstances": "[parameters('readyInstances')]"
+                },
+                "dynamicPoolConfiguration": {
+                  "lifecycleConfiguration": {
+                    "lifecycleType": "Timed",
+                    "cooldownPeriodInSeconds": "[parameters('cooldownSeconds')]",
+                    "maxAlivePeriodInSeconds": "[parameters('maxAliveSeconds')]"
+                  }
+                },
+                "sessionNetworkConfiguration": {
+                  "status": "EgressEnabled"
+                },
+                "managedIdentitySettings": [
+                  {
+                    "identity": "[parameters('managedIdentityId')]",
+                    "lifecycle": "Main"
+                  }
+                ],
+                "secrets": "[if(variables('useGhcrCredentials'), createArray(createObject('name', 'ghcr-token', 'value', parameters('ghcrToken'))), createArray())]"
+              },
+              "tags": {
+                "Project": "Triagent",
+                "Component": "SessionPool"
+              }
+            }
+          ],
+          "outputs": {
+            "poolId": {
+              "type": "string",
+              "metadata": {
+                "description": "Session Pool resource ID"
+              },
+              "value": "[resourceId('Microsoft.App/sessionPools', format('{0}-session-pool', parameters('namingPrefix')))]"
+            },
+            "poolName": {
+              "type": "string",
+              "metadata": {
+                "description": "Session Pool resource name"
+              },
+              "value": "[format('{0}-session-pool', parameters('namingPrefix'))]"
+            },
+            "poolEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Session Pool management endpoint"
+              },
+              "value": "[reference(resourceId('Microsoft.App/sessionPools', format('{0}-session-pool', parameters('namingPrefix'))), '2025-01-01').poolManagementEndpoint]"
+            },
+            "containerImage": {
+              "type": "string",
+              "metadata": {
+                "description": "Container image being used"
+              },
+              "value": "[variables('containerImage')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'acr-deployment')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'cae-deployment')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'identity-deployment')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}-rg', parameters('namingPrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "redis-deployment",
+      "resourceGroup": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "namingPrefix": {
+            "value": "[parameters('namingPrefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "skuName": {
+            "value": "[parameters('redisSku')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.31.92.45157",
+              "templateHash": "3670254045343079460"
+            }
+          },
+          "parameters": {
+            "namingPrefix": {
+              "type": "string",
+              "metadata": {
+                "description": "Naming prefix for resources"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            },
+            "skuName": {
+              "type": "string",
+              "defaultValue": "Standard",
+              "metadata": {
+                "description": "Redis SKU name (Basic, Standard, Premium)"
+              }
+            },
+            "capacity": {
+              "type": "int",
+              "defaultValue": 1,
+              "metadata": {
+                "description": "Redis SKU capacity (0-6 for Basic/Standard, 1-5 for Premium)"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Cache/redis",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}-redis', parameters('namingPrefix'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "sku": {
+                  "name": "[parameters('skuName')]",
+                  "family": "[if(equals(parameters('skuName'), 'Premium'), 'P', 'C')]",
+                  "capacity": "[parameters('capacity')]"
+                },
+                "redisVersion": "6",
+                "enableNonSslPort": false,
+                "minimumTlsVersion": "1.2",
+                "redisConfiguration": {
+                  "maxmemory-policy": "volatile-lru"
+                },
+                "publicNetworkAccess": "Enabled"
+              },
+              "tags": {
+                "Project": "Triagent",
+                "Component": "Redis"
+              }
+            }
+          ],
+          "outputs": {
+            "hostname": {
+              "type": "string",
+              "metadata": {
+                "description": "Redis hostname"
+              },
+              "value": "[reference(resourceId('Microsoft.Cache/redis', format('{0}-redis', parameters('namingPrefix'))), '2024-03-01').hostName]"
+            },
+            "sslPort": {
+              "type": "int",
+              "metadata": {
+                "description": "Redis SSL port"
+              },
+              "value": "[reference(resourceId('Microsoft.Cache/redis', format('{0}-redis', parameters('namingPrefix'))), '2024-03-01').sslPort]"
+            },
+            "primaryKey": {
+              "type": "string",
+              "metadata": {
+                "description": "Redis primary access key"
+              },
+              "value": "[listKeys(resourceId('Microsoft.Cache/redis', format('{0}-redis', parameters('namingPrefix'))), '2024-03-01').primaryKey]"
+            },
+            "redisId": {
+              "type": "string",
+              "metadata": {
+                "description": "Redis resource ID"
+              },
+              "value": "[resourceId('Microsoft.Cache/redis', format('{0}-redis', parameters('namingPrefix')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}-rg', parameters('namingPrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "appservice-deployment",
+      "resourceGroup": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "namingPrefix": {
+            "value": "[parameters('namingPrefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "sku": {
+            "value": "[parameters('appServiceSku')]"
+          },
+          "redisHostname": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'redis-deployment'), '2022-09-01').outputs.hostname.value]"
+          },
+          "redisKey": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'redis-deployment'), '2022-09-01').outputs.primaryKey.value]"
+          },
+          "sessionPoolEndpoint": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'sessionpool-deployment'), '2022-09-01').outputs.poolEndpoint.value]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'appinsights-deployment'), '2022-09-01').outputs.connectionString.value]"
+          },
+          "triagentApiKey": {
+            "value": "[parameters('triagentApiKey')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.31.92.45157",
+              "templateHash": "11300698202273943568"
+            }
+          },
+          "parameters": {
+            "namingPrefix": {
+              "type": "string",
+              "metadata": {
+                "description": "Naming prefix for resources"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for resources"
+              }
+            },
+            "sku": {
+              "type": "string",
+              "defaultValue": "S1",
+              "metadata": {
+                "description": "App Service Plan SKU"
+              }
+            },
+            "redisHostname": {
+              "type": "string",
+              "metadata": {
+                "description": "Redis hostname"
+              }
+            },
+            "redisKey": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Redis primary key"
+              }
+            },
+            "sessionPoolEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Session Pool management endpoint"
+              }
+            },
+            "appInsightsConnectionString": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights connection string"
+              }
+            },
+            "triagentApiKey": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "API key for simple authentication (MVP)"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}-asp', parameters('namingPrefix'))]",
+              "location": "[parameters('location')]",
+              "kind": "linux",
+              "sku": {
+                "name": "[parameters('sku')]"
+              },
+              "properties": {
+                "reserved": true
+              },
+              "tags": {
+                "Project": "Triagent",
+                "Component": "AppServicePlan"
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}-app', parameters('namingPrefix'))]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('{0}-asp', parameters('namingPrefix')))]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "linuxFxVersion": "PYTHON|3.11",
+                  "alwaysOn": true,
+                  "healthCheckPath": "/health",
+                  "ftpsState": "Disabled",
+                  "minTlsVersion": "1.2",
+                  "appSettings": [
+                    {
+                      "name": "TRIAGENT_REDIS_HOST",
+                      "value": "[parameters('redisHostname')]"
+                    },
+                    {
+                      "name": "TRIAGENT_REDIS_PASSWORD",
+                      "value": "[parameters('redisKey')]"
+                    },
+                    {
+                      "name": "TRIAGENT_REDIS_PORT",
+                      "value": "6380"
+                    },
+                    {
+                      "name": "TRIAGENT_REDIS_SSL",
+                      "value": "true"
+                    },
+                    {
+                      "name": "TRIAGENT_SESSION_POOL_ENDPOINT",
+                      "value": "[parameters('sessionPoolEndpoint')]"
+                    },
+                    {
+                      "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+                      "value": "true"
+                    },
+                    {
+                      "name": "WEBSITES_PORT",
+                      "value": "8000"
+                    },
+                    {
+                      "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                      "value": "[parameters('appInsightsConnectionString')]"
+                    },
+                    {
+                      "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+                      "value": "~3"
+                    },
+                    {
+                      "name": "AUTH_MODE",
+                      "value": "api_key"
+                    },
+                    {
+                      "name": "TRIAGENT_API_KEY",
+                      "value": "[parameters('triagentApiKey')]"
+                    }
+                  ]
+                }
+              },
+              "tags": {
+                "Project": "Triagent",
+                "Component": "AppService"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', format('{0}-asp', parameters('namingPrefix')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "url": {
+              "type": "string",
+              "metadata": {
+                "description": "App Service URL"
+              },
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', format('{0}-app', parameters('namingPrefix'))), '2023-12-01').defaultHostName)]"
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "App Service system-assigned principal ID"
+              },
+              "value": "[reference(resourceId('Microsoft.Web/sites', format('{0}-app', parameters('namingPrefix'))), '2023-12-01', 'full').identity.principalId]"
+            },
+            "appName": {
+              "type": "string",
+              "metadata": {
+                "description": "App Service resource name"
+              },
+              "value": "[format('{0}-app', parameters('namingPrefix'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'appinsights-deployment')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'redis-deployment')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}-rg', parameters('namingPrefix')))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'sessionpool-deployment')]"
+      ]
+    },
+    {
+      "condition": "[parameters('enableSessionPoolRole')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "sessionpool-role-assignment",
+      "resourceGroup": "[format('{0}-rg', parameters('namingPrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'appservice-deployment'), '2022-09-01').outputs.principalId.value]"
+          },
+          "sessionPoolName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'sessionpool-deployment'), '2022-09-01').outputs.poolName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.31.92.45157",
+              "templateHash": "998220356322690316"
+            }
+          },
+          "parameters": {
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID to assign the role to (App Service managed identity)"
+              }
+            },
+            "sessionPoolName": {
+              "type": "string",
+              "metadata": {
+                "description": "Session Pool resource name"
+              }
+            }
+          },
+          "variables": {
+            "sessionExecutorRoleId": "0fb8eba5-a2bb-4abe-b1c1-49dfad359bb0"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.App/sessionPools/{0}', parameters('sessionPoolName'))]",
+              "name": "[guid(resourceId('Microsoft.App/sessionPools', parameters('sessionPoolName')), parameters('principalId'), variables('sessionExecutorRoleId'))]",
+              "properties": {
+                "principalId": "[parameters('principalId')]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('sessionExecutorRoleId'))]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ],
+          "outputs": {
+            "roleAssignmentId": {
+              "type": "string",
+              "value": "[extensionResourceId(resourceId('Microsoft.App/sessionPools', parameters('sessionPoolName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.App/sessionPools', parameters('sessionPoolName')), parameters('principalId'), variables('sessionExecutorRoleId')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'appservice-deployment')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}-rg', parameters('namingPrefix')))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'sessionpool-deployment')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "resourceGroupName": {
+      "type": "string",
+      "value": "[format('{0}-rg', parameters('namingPrefix'))]"
+    },
+    "acrLoginServer": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'acr-deployment'), '2022-09-01').outputs.loginServer.value]"
+    },
+    "appServiceUrl": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'appservice-deployment'), '2022-09-01').outputs.url.value]"
+    },
+    "sessionPoolEndpoint": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'sessionpool-deployment'), '2022-09-01').outputs.poolEndpoint.value]"
+    },
+    "redisHostname": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'redis-deployment'), '2022-09-01').outputs.hostname.value]"
+    },
+    "managedIdentityId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'identity-deployment'), '2022-09-01').outputs.identityId.value]"
+    },
+    "appInsightsConnectionString": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'appinsights-deployment'), '2022-09-01').outputs.connectionString.value]"
+    },
+    "containerImage": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}-rg', parameters('namingPrefix'))), 'Microsoft.Resources/deployments', 'sessionpool-deployment'), '2022-09-01').outputs.containerImage.value]"
+    }
+  }
+}

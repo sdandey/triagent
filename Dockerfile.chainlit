@@ -1,0 +1,90 @@
+# Dockerfile.chainlit - Triagent with Chainlit Web UI
+#
+# This Dockerfile creates a container with triagent accessible via Chainlit web UI.
+# Uses Chainlit for interactive chat and FastAPI for internal API.
+#
+# Build:   docker build -f Dockerfile.chainlit -t ghcr.io/sdandey/triagent-chainlit:latest .
+# Run:     docker run -p 8080:8080 -p 8081:8081 ghcr.io/sdandey/triagent-chainlit:latest
+# Access:  http://localhost:8080 (Chainlit UI), http://localhost:8081 (Internal API)
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies (same as Dockerfile.web)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js (for MCP servers)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Azure CLI
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+
+# Set shared Azure CLI extension directory
+ENV AZURE_EXTENSION_DIR=/opt/az/extensions
+
+# Install Azure CLI extensions (versions from src/triagent/versions.py)
+RUN mkdir -p /opt/az/extensions && \
+    az extension add --name azure-devops --version 1.0.2 -y && \
+    az extension add --name application-insights --version 2.0.0b1 -y --allow-preview true && \
+    az extension add --name log-analytics --version 1.0.0b1 -y --allow-preview true
+
+# Install uv package manager
+RUN pip install --upgrade pip uv
+
+# Copy project files
+COPY pyproject.toml README.md ./
+COPY src/ src/
+
+# Install triagent with web dependencies
+RUN uv pip install --system -e ".[web]"
+
+# Create non-root user
+RUN useradd -m -u 1000 -s /bin/bash triagent && \
+    chown -R triagent:triagent /app
+
+USER triagent
+
+# Set npm global directory for non-root user
+ENV NPM_CONFIG_PREFIX=/home/triagent/.npm-global
+ENV PATH=$PATH:/home/triagent/.npm-global/bin
+
+# Create config and npm directories
+RUN mkdir -p /home/triagent/.triagent /home/triagent/.npm-global /home/triagent/.azure
+
+# Environment
+ENV TERM=dumb
+ENV TRIAGENT_DOCKER=1
+
+# Environment variables for non-interactive Claude CLI
+# These ensure the SDK doesn't hang waiting for user input
+ENV CI=true
+ENV ANTHROPIC_HEADLESS=1
+ENV CLAUDE_CODE_SKIP_ONBOARDING=1
+ENV CLAUDE_SKIP_INIT=1
+
+# Expose ports: 8080 for Chainlit, 8081 for internal API
+EXPOSE 8080 8081
+
+# Copy and use startup script
+USER root
+COPY src/triagent/web/container/start.sh /start.sh
+RUN chmod +x /start.sh
+
+# Create entrypoint script to fix volume permissions
+RUN echo '#!/bin/bash\n\
+chown -R triagent:triagent /home/triagent/.triagent /home/triagent/.azure 2>/dev/null || true\n\
+exec su triagent -c "/start.sh"\n\
+' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+# Start with entrypoint
+ENTRYPOINT ["/entrypoint.sh"]

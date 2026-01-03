@@ -1,0 +1,85 @@
+# Docker Compose for Local Full-Stack Integration Testing
+#
+# Usage:
+#   docker compose -f docker-compose.integration.yml up -d redis fastapi
+#   docker compose -f docker-compose.integration.yml run integration-tests
+#   docker compose -f docker-compose.integration.yml down -v
+#
+# Services:
+#   redis     - Redis cache for session storage
+#   fastapi   - FastAPI backend application
+#   integration-tests - Test runner (on-demand)
+
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: triagent-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis-data:/data
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile.chainlit
+    container_name: triagent-api
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      - TRIAGENT_REDIS_HOST=redis
+      - TRIAGENT_REDIS_PORT=6379
+      - TRIAGENT_REDIS_PASSWORD=
+      - TRIAGENT_REDIS_SSL=false
+      - TRIAGENT_TRIAGENT_API_KEY=local-test-key
+      - TRIAGENT_SESSION_POOL_ENDPOINT=mock://localhost
+      - TRIAGENT_SESSION_TTL=7200
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: uvicorn triagent.web.app:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.chainlit
+    container_name: triagent-tests
+    environment:
+      - TRIAGENT_SANDBOX_URL=http://fastapi:8000
+      - TRIAGENT_SANDBOX_API_KEY=local-test-key
+      - TRIAGENT_REDIS_HOST=redis
+      - TRIAGENT_REDIS_PORT=6379
+      - TRIAGENT_REDIS_PASSWORD=
+      - TRIAGENT_REDIS_SSL=false
+    depends_on:
+      fastapi:
+        condition: service_healthy
+    command: >
+      sh -c "
+        pip install pytest pytest-asyncio httpx testcontainers[redis] --quiet &&
+        pytest tests/integration/ tests/azure/test_sandbox_api.py -v --tb=short
+      "
+    profiles:
+      - test
+
+volumes:
+  redis-data:
+
+networks:
+  default:
+    name: triagent-network

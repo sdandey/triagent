@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #333; line-height: 1.5; }
+    table { border-collapse: collapse; margin: 10px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+    th { background-color: #f5f5f5; font-weight: bold; }
+    code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: Consolas, monospace; font-size: 10pt; }
+    pre { background-color: #f4f4f4; padding: 12px; border-radius: 4px; font-family: Consolas, monospace; font-size: 10pt; overflow-x: auto; }
+    h3 { color: #2c3e50; margin-top: 20px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+    .status { color: #c0392b; font-weight: bold; }
+    .action { color: #27ae60; font-weight: bold; }
+    hr { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+  </style>
+</head>
+<body>
+
+<p>Hi Dimitri,</p>
+
+<p>With the help of Andrew Smith, we created a sandbox subscription <strong>"US-AZSUB-AME-AA-ODATAOPENAI-SBX"</strong> for our AI Agent POC project. While experimenting with Azure AI Foundry and Container Apps Dynamic Sessions, I have identified a few gaps which I've described below in detail.</p>
+
+<p>I see your name as the owner for the <strong>SG-DTTL Cloud OneCop Azure4Deloitte Automation Accounts ReadWrite Prod</strong> group. I'm reaching out to see if you can help with modifying the <strong>Deloitte Custom Contributor</strong> role to add data-plane actions that would be helpful for our POC work.</p>
+
+<hr>
+
+<h3>My Current Access on This Subscription</h3>
+
+<table>
+  <tr>
+    <th>Group Membership</th>
+    <th>Role Assigned</th>
+    <th>Scope</th>
+  </tr>
+  <tr>
+    <td>SG-US Audit Cortex Architect</td>
+    <td><strong>Deloitte Custom Contributor</strong></td>
+    <td>Subscription</td>
+  </tr>
+  <tr>
+    <td>SG-US Omnia Data Cloud Architects Elevated</td>
+    <td>Reader</td>
+    <td>Subscription</td>
+  </tr>
+</table>
+
+<hr>
+
+<h3>Current Data Plane Actions (Deloitte Custom Contributor)</h3>
+
+<table>
+  <tr>
+    <th>Section</th>
+    <th>Current Value</th>
+  </tr>
+  <tr>
+    <td><code>dataActions</code></td>
+    <td><code>[]</code> (empty)</td>
+  </tr>
+  <tr>
+    <td><code>notDataActions</code></td>
+    <td><code>[]</code> (empty)</td>
+  </tr>
+</table>
+
+<p><span class="status">Status:</span> No data plane permissions are currently configured for any services.</p>
+
+<hr>
+
+<h3>Proposed Changes to Deloitte Custom Contributor Role</h3>
+
+<p><span class="action">ADD</span> the following dataActions:</p>
+
+<table>
+  <tr>
+    <th>#</th>
+    <th>dataAction to ADD</th>
+    <th>Service</th>
+    <th>Purpose</th>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td><code>Microsoft.App/sessionPools/*/read</code></td>
+    <td>Container Apps</td>
+    <td>Read session pool information</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td><code>Microsoft.App/sessionPools/interpreters/execute/action</code></td>
+    <td>Container Apps</td>
+    <td>Execute code in dynamic sessions</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td><code>Microsoft.App/sessionPools/interpreters/read</code></td>
+    <td>Container Apps</td>
+    <td>Read interpreter configuration</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><code>Microsoft.App/sessionPools/executions/*</code></td>
+    <td>Container Apps</td>
+    <td>Manage code execution lifecycle</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td><code>Microsoft.App/sessionPools/files/*</code></td>
+    <td>Container Apps</td>
+    <td>File operations in sessions</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td><code>Microsoft.CognitiveServices/*</code></td>
+    <td>AI Foundry / OpenAI</td>
+    <td>OpenAI APIs, AI Agents, Speech, Vision</td>
+  </tr>
+</table>
+
+<p><strong>JSON Format:</strong></p>
+
+<pre>"dataActions": [
+  "Microsoft.App/sessionPools/*/read",
+  "Microsoft.App/sessionPools/interpreters/execute/action",
+  "Microsoft.App/sessionPools/interpreters/read",
+  "Microsoft.App/sessionPools/executions/*",
+  "Microsoft.App/sessionPools/files/*",
+  "Microsoft.CognitiveServices/*"
+]</pre>
+
+<hr>
+
+<h3>Summary of Changes</h3>
+
+<table>
+  <tr>
+    <th>Section</th>
+    <th>Current</th>
+    <th>Action</th>
+    <th>Proposed</th>
+  </tr>
+  <tr>
+    <td><code>dataActions</code></td>
+    <td><code>[]</code> (empty - 0 items)</td>
+    <td><span class="action">ADD</span></td>
+    <td>6 new dataActions</td>
+  </tr>
+  <tr>
+    <td><code>notDataActions</code></td>
+    <td><code>[]</code> (empty)</td>
+    <td>No change</td>
+    <td><code>[]</code> (empty)</td>
+  </tr>
+</table>
+
+<hr>
+
+<h3>Precedent</h3>
+
+<p>This follows the same pattern as <strong>Deloitte Veeam Contributor</strong> which already includes dataActions for KeyVault and Storage:</p>
+
+<pre>"dataActions": [
+  "Microsoft.KeyVault/vaults/keys/decrypt/action",
+  "Microsoft.KeyVault/vaults/keys/encrypt/action",
+  "Microsoft.KeyVault/vaults/keys/read",
+  "Microsoft.Storage/storageAccounts/queueServices/queues/messages/delete",
+  "Microsoft.Storage/storageAccounts/queueServices/queues/messages/read",
+  "Microsoft.Storage/storageAccounts/queueServices/queues/messages/write"
+]</pre>
+
+<hr>
+
+<p>Please let me know if you need any additional information or would like to discuss.</p>
+
+<p>Thank you,<br>
+Santosh Dandey</p>
+
+</body>
+</html>
