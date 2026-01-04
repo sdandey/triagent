@@ -833,7 +833,7 @@ def main(
     Start an interactive chat session using the Claude Agent SDK.
     """
     console = Console()
-    
+
     # Apply Windows SDK patch for long command lines
     patch_sdk_for_windows()
 

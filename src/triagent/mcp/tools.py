@@ -179,7 +179,7 @@ async def get_code_review_guidelines_tool(args: dict[str, Any]) -> dict[str, Any
     """Get code review guidelines for a specific language.
 
     Call this tool before reviewing code to get the appropriate guidelines.
-    
+
     Args:
         args: Dict with 'language' (python/pyspark/dotnet/auto) and optional 'file_extensions'
 
@@ -201,7 +201,7 @@ async def get_code_review_guidelines_tool(args: dict[str, Any]) -> dict[str, Any
                 lang = EXTENSION_LANGUAGE_MAP.get(f".{ext.lower()}")
             if lang:
                 detected_languages[lang] = detected_languages.get(lang, 0) + 1
-        
+
         if detected_languages:
             # Use most common language
             language = max(detected_languages, key=detected_languages.get)
@@ -213,7 +213,7 @@ async def get_code_review_guidelines_tool(args: dict[str, Any]) -> dict[str, Any
 
     # Load skill content
     content = load_skill_by_name(skill_name)
-    
+
     if content:
         text = "Code Review Guidelines for " + language.upper() + ":" + chr(10) + chr(10) + content
         return {
@@ -224,11 +224,11 @@ async def get_code_review_guidelines_tool(args: dict[str, Any]) -> dict[str, Any
                 }
             ]
         }
-    
+
     return {
         "content": [
             {
-                "type": "text", 
+                "type": "text",
                 "text": f"No code review guidelines found for language: {language}"
             }
         ],
