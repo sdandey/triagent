@@ -208,6 +208,24 @@ Configuration is stored in `~/.triagent/`:
 └── history/             # Conversation history
 ```
 
+## Session Logs
+
+Triagent logs session activity for troubleshooting and debugging. Logs are stored in platform-specific locations:
+
+| Platform | Location |
+|----------|----------|
+| **macOS** | `~/Library/Logs/triagent/sessions/` |
+| **Windows** | `%LOCALAPPDATA%\triagent\logs\sessions\` |
+| **Linux** | `~/.local/share/triagent/logs/sessions/` |
+
+Each session creates a timestamped log file (e.g., `session_20260103_143022.log`) containing:
+- Session start/end events
+- User prompts
+- Tool calls (MCP tools, bash commands)
+- Agent responses and errors
+
+Example Windows path: `C:\Users\{username}\AppData\Local\triagent\logs\sessions\`
+
 ## Teams
 
 Triagent supports multiple team configurations with custom CLAUDE.md files:
@@ -242,12 +260,11 @@ ruff check src/
 ### Required
 
 - **Python 3.11+** - Core runtime
-- **Node.js 18+** - For Claude Code CLI and MCP servers
-- **Claude Code CLI** - Powers the AI agent
-  ```bash
-  npm install -g @anthropic-ai/claude-code
-  ```
+- **Node.js 18+** - For MCP servers (Azure DevOps integration)
+- **Git for Windows** - (Windows only) Required by the bundled Claude Code CLI
 - **Azure DevOps account** - For ADO automation
+
+> **Note:** Claude Code CLI is automatically bundled with the `claude-agent-sdk` package. No separate npm installation is required.
 
 ### Recommended
 
@@ -292,58 +309,37 @@ ruff check src/
    brew install azure-cli
    ```
 
-5. **Install Claude Code CLI**:
+5. **Install Triagent**:
    ```bash
-   npm install -g @anthropic-ai/claude-code
-   ```
-
-6. **Install Triagent**:
-   ```bash
+   pip install triagent
+   # or use the installer script:
    curl -sSL https://raw.githubusercontent.com/sdandey/triagent/main/install.sh | bash
    ```
 
-7. **Configure Azure CLI extensions**:
+6. **Configure Azure CLI extensions**:
    ```bash
    az extension add --name azure-devops
    az extension add --name application-insights --allow-preview true
    az extension add --name log-analytics --allow-preview true
    ```
 
-8. **Login to Azure**:
+7. **Login to Azure**:
    ```bash
    az login
    ```
 
 ### Windows
 
-1. **Install via PowerShell** (Run as Administrator):
+1. **Install prerequisites via PowerShell** (Run as Administrator):
    ```powershell
    irm https://raw.githubusercontent.com/sdandey/triagent/main/install.ps1 | iex
    ```
-   This installs Python, Node.js, Git, Azure CLI, and triagent automatically.
+   This installs Python, Node.js, Git, and Azure CLI.
 
-2. **Or manual installation**:
-
-   a. **Install Python 3.11+**: Download from https://www.python.org/downloads/
-      - Check "Add Python to PATH" during installation
-
-   b. **Install Node.js 18+**: Download from https://nodejs.org/
-      - Use LTS version
-
-   c. **Install Git for Windows**: Download from https://git-scm.com/download/win
-      - Required for Claude Code CLI bash execution
-
-   d. **Install Azure CLI**: Download from https://aka.ms/installazurecliwindows
-
-   e. **Install Claude Code CLI**:
-      ```powershell
-      npm install -g @anthropic-ai/claude-code
-      ```
-
-   f. **Install Triagent**:
-      ```powershell
-      pip install triagent
-      ```
+2. **Install triagent**:
+   ```powershell
+   pip install triagent
+   ```
 
 3. **Configure Azure CLI extensions** (PowerShell):
    ```powershell
@@ -357,6 +353,30 @@ ruff check src/
    az login
    ```
 
+5. **Run triagent**:
+   ```powershell
+   triagent
+   ```
+
+> **Git Bash Users:** If you want to run triagent from Git Bash, you need to set environment variables in `~/.bashrc`. See [docs/windows-installation.md](docs/windows-installation.md) for detailed instructions.
+
+#### Manual Installation (Alternative)
+
+If you prefer manual installation:
+
+1. **Python 3.11+**: Download from https://www.python.org/downloads/
+   - Check "Add Python to PATH" during installation
+
+2. **Node.js 18+**: Download from https://nodejs.org/
+   - Use LTS version
+
+3. **Git for Windows**: Download from https://git-scm.com/download/win
+   - Required by the bundled Claude Code CLI
+
+4. **Azure CLI** (optional): Download from https://aka.ms/installazurecliwindows
+
+5. **Install triagent**: `pip install triagent`
+
 ### Verify Installation
 
 Run these commands to verify your setup:
@@ -364,10 +384,9 @@ Run these commands to verify your setup:
 ```bash
 # Check versions
 triagent --version
-claude --version
-az --version
-node --version
 python --version
+node --version
+az --version  # Optional
 
 # Start triagent and run setup wizard
 triagent

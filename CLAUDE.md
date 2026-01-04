@@ -39,6 +39,15 @@ ruff check src/
 mypy src/
 ```
 
+## Git Commit Guidelines
+
+When creating commits:
+- **DO NOT** include "Generated with Claude Code" footer
+- **DO NOT** include "Co-Authored-By: Claude" lines
+- Use conventional commit format: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
+- Keep subject line under 72 characters
+- Use body for detailed explanation when needed
+
 ## Architecture
 
 ### Core Components

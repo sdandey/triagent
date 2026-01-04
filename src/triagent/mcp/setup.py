@@ -131,6 +131,21 @@ def _find_az_command() -> str | None:
             if path.exists():
                 return str(path)
 
+        # Git Bash fallback: Use shell=True to let the shell resolve the command
+        # shutil.which() doesn't work reliably in MINGW64/Git Bash on Windows
+        try:
+            result = subprocess.run(
+                "az --version",
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                return "az"  # Shell can find it
+        except subprocess.TimeoutExpired:
+            pass
+
     return None
 
 
@@ -138,6 +153,7 @@ def check_azure_cli_installed() -> tuple[bool, str]:
     """Check if Azure CLI is installed.
 
     Checks both system PATH and common pip install locations (~/.local/bin).
+    Uses shell=True fallback for Git Bash compatibility on Windows.
 
     Returns:
         Tuple of (is_installed, version_string)
@@ -157,9 +173,26 @@ def check_azure_cli_installed() -> tuple[bool, str]:
             # Extract version from first line
             first_line = result.stdout.split("\n")[0]
             return True, first_line
-        return False, ""
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False, ""
+        pass
+
+    # Git Bash fallback: try with shell=True
+    if platform.system() == "Windows":
+        try:
+            result = subprocess.run(
+                f"{az_cmd} --version",
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                first_line = result.stdout.split("\n")[0]
+                return True, first_line
+        except subprocess.TimeoutExpired:
+            pass
+
+    return False, ""
 
 
 def check_azure_devops_extension() -> bool:
@@ -175,9 +208,26 @@ def check_azure_devops_extension() -> bool:
             text=True,
             timeout=10,
         )
-        return result.returncode == 0
+        if result.returncode == 0:
+            return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
+        pass
+
+    # Git Bash fallback: try with shell=True
+    if platform.system() == "Windows":
+        try:
+            result = subprocess.run(
+                f"{az_cmd} extension show --name azure-devops",
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            return result.returncode == 0
+        except subprocess.TimeoutExpired:
+            pass
+
+    return False
 
 
 def install_azure_devops_extension() -> bool:
@@ -222,9 +272,26 @@ def check_azure_extension(name: str) -> bool:
             text=True,
             timeout=10,
         )
-        return result.returncode == 0
+        if result.returncode == 0:
+            return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
+        pass
+
+    # Git Bash fallback: try with shell=True
+    if platform.system() == "Windows":
+        try:
+            result = subprocess.run(
+                f"{az_cmd} extension show --name {name}",
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            return result.returncode == 0
+        except subprocess.TimeoutExpired:
+            pass
+
+    return False
 
 
 def install_azure_extension(name: str, version: str | None = None) -> bool:
@@ -285,15 +352,34 @@ def run_azure_login() -> bool:
     Returns:
         True if login succeeded
     """
+    az_cmd = _find_az_command()
+    if not az_cmd:
+        return False
+
     try:
         result = subprocess.run(
-            ["az", "login"],
+            [az_cmd, "login"],
             capture_output=False,  # Let user see the browser prompt
             timeout=300,  # 5 minute timeout for login
         )
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
+        pass
+
+    # Git Bash fallback: try with shell=True
+    if platform.system() == "Windows":
+        try:
+            result = subprocess.run(
+                f"{az_cmd} login",
+                shell=True,
+                capture_output=False,
+                timeout=300,
+            )
+            return result.returncode == 0
+        except subprocess.TimeoutExpired:
+            pass
+
+    return False
 
 
 def get_azure_account() -> dict[str, Any] | None:
@@ -302,18 +388,38 @@ def get_azure_account() -> dict[str, Any] | None:
     Returns:
         Account info dict or None if not logged in
     """
+    az_cmd = _find_az_command()
+    if not az_cmd:
+        return None
+
     try:
         result = subprocess.run(
-            ["az", "account", "show", "--output", "json"],
+            [az_cmd, "account", "show", "--output", "json"],
             capture_output=True,
             text=True,
             timeout=10,
         )
         if result.returncode == 0:
             return json.loads(result.stdout)
-        return None
     except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
-        return None
+        pass
+
+    # Git Bash fallback: try with shell=True
+    if platform.system() == "Windows":
+        try:
+            result = subprocess.run(
+                f"{az_cmd} account show --output json",
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                return json.loads(result.stdout)
+        except (subprocess.TimeoutExpired, json.JSONDecodeError):
+            pass
+
+    return None
 
 
 def setup_mcp_servers(

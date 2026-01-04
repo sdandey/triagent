@@ -130,6 +130,7 @@ class PersonaDefinition:
     team: str  # Team identifier (e.g., "omnia-data")
     core_skills: list[str] = field(default_factory=list)  # Shared skill names
     skills: list[str] = field(default_factory=list)  # Persona-specific skill names
+    on_demand_skills: list[str] = field(default_factory=list)  # Skills loaded via MCP tool
     system_prompt_additions: str = ""  # Additional context for system prompt
     default_model: str = "sonnet"
 
@@ -143,6 +144,7 @@ class PersonaDefinition:
             team=team,
             core_skills=data.get("core_skills", []),
             skills=data.get("skills", []),
+            on_demand_skills=data.get("on_demand_skills", []),
             system_prompt_additions=data.get("system_prompt_additions", ""),
             default_model=data.get("default_model", "sonnet"),
         )

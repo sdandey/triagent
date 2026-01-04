@@ -9,13 +9,17 @@ core_skills:
   - ado_lsi_defect
   - team_context
 
+# Skills loaded into system prompt at startup
 skills:
-  - dotnet_code_review
-  - python_code_review
-  - pyspark_code_review
   - ado_pr_review
   - release_investigation
   - release_pipeline
+
+# Skills loaded on-demand via MCP tool (not in system prompt)
+on_demand_skills:
+  - dotnet_code_review
+  - python_code_review
+  - pyspark_code_review
 
 system_prompt_additions: |
   ## Developer Persona Context
@@ -26,5 +30,16 @@ system_prompt_additions: |
   - Build failure analysis
 
   Focus on code quality, patterns, and best practices.
+
+  ## Code Review Process
+  When asked to review code or a PR:
+  1. FIRST call the \ tool with the appropriate language
+     - Use "python" for .py files
+     - Use "pyspark" for Jupyter notebooks or Spark code
+     - Use "dotnet" for .cs, .csproj files
+     - Use "auto" with file_extensions if reviewing multiple file types
+  2. Apply the returned guidelines to your review
+  3. Organize feedback by priority (Critical, High, Medium, Low)
+  4. Provide specific code examples showing recommended fixes
 
 default_model: sonnet

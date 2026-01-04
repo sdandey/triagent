@@ -300,6 +300,45 @@ def load_persona(team: str, persona_name: str) -> LoadedPersona | None:
     )
 
 
+
+
+def load_skill_by_name(skill_name: str, team: str = "omnia-data") -> str | None:
+    """Load a skill's content by name for on-demand retrieval.
+
+    Searches for the skill in the following order:
+    1. Team's developer persona directory (e.g., omnia-data/developer/)
+    2. Team's support persona directory (e.g., omnia-data/support/)
+    3. Team's core directory (e.g., omnia-data/core/)
+    4. Global core directory (core/)
+
+    Args:
+        skill_name: Name of the skill (without .md extension)
+        team: Team identifier (default: "omnia-data")
+
+    Returns:
+        Skill content as string, or None if not found
+    """
+    # Search paths in order of priority
+    search_paths = [
+        SKILLS_DIR / team / "developer" / f"{skill_name}.md",
+        SKILLS_DIR / team / "support" / f"{skill_name}.md",
+        SKILLS_DIR / team / "core" / f"{skill_name}.md",
+        SKILLS_DIR / "core" / f"{skill_name}.md",
+    ]
+
+    for path in search_paths:
+        if path.exists():
+            skill = load_skill(path)
+            if skill:
+                # Return the full skill content including display name header
+                if skill.metadata.display_name:
+                    header = "# " + skill.metadata.display_name + chr(10) + chr(10)
+                else:
+                    header = ""
+                return header + skill.content
+
+    return None
+
 class SkillLoader:
     """Convenience class for loading skills and personas."""
 

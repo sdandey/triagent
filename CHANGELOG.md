@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-01-03
+
 ### Added
+- **Windows SDK Patch** for long system prompts (`patch_sdk_for_windows()`)
+  - Handles Windows ~8191 char command line limit
+  - Writes 57K+ system prompt to temp file using `--system-prompt-file`
+- **On-Demand Skills Loading** for system prompt optimization:
+  - New `get_code_review_guidelines` MCP tool fetches guidelines only when needed
+  - Code review skills (python, pyspark, dotnet) no longer loaded at startup
+  - Reduces initial system prompt size by ~5000 chars
+  - Auto-detects language from file extensions
+- **Windows Installer Improvements** (`install.ps1`):
+  - Piped execution support (`irm | iex`)
+  - `-ConfigureGitBash` flag for Git Bash environment setup
+- **Cross-Platform Test Fixtures** (`tests/conftest.py`):
+  - `clean_env_preserve_home` fixture preserves HOME/USERPROFILE
 - **Issue Creation Workflow** in CLAUDE.md with templates for:
   - Acceptance Criteria from user perspective
   - Testing Guide with test scenarios (unit, integration, E2E)
@@ -33,6 +48,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated README.md with architecture documentation
 - Platform setup instructions for macOS and Windows
 
+### Fixed
+- **Git Bash Azure CLI Detection** ([#9](https://github.com/sdandey/triagent/issues/9)):
+  - Added `shell=True` fallback to all Azure CLI functions
+  - `shutil.which()` doesn't work reliably in MINGW64/Git Bash
+- **Azure Extension Detection** in Git Bash:
+  - `check_azure_extension()`, `check_azure_devops_extension()`
+- **Azure Login** in Git Bash:
+  - `run_azure_login()`, `get_azure_account()`
+
 ### Changed
 - Now uses Claude Agent SDK exclusively for all operations
 - Default API provider changed from `databricks` to `azure_foundry`
@@ -44,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING**: Removed `--legacy` CLI flag and Databricks implementation
 - Removed `DatabricksClient`, `AgentSession`, and related legacy code (~1046 lines)
 - Removed Databricks as an API provider option
+- Claude Code CLI prerequisite check from `/init` (SDK bundles its own CLI binary)
 
 ## [1.3.0] - 2025-12-28
 

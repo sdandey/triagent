@@ -131,6 +131,7 @@ class TriagentSDKClient:
             "mcp__triagent__get_team_config",
             "mcp__triagent__generate_kusto_query",
             "mcp__triagent__list_telemetry_tables",
+            "mcp__triagent__get_code_review_guidelines",
             # Azure DevOps MCP tools - read operations (auto-approved in permissions.py)
             "mcp__azure-devops__get_me",
             "mcp__azure-devops__list_organizations",
