@@ -76,6 +76,15 @@ AZURE_CLI_WRITE_PATTERNS = [
     ("az repos policy update", "Update branch policy"),
 ]
 
+# Curl-based API patterns for Azure DevOps (method, description)
+# These require both the method pattern AND dev.azure.com in the command
+CURL_ADO_WRITE_PATTERNS = [
+    ("-x delete", "DELETE API call to Azure DevOps"),
+    ("-x post", "POST API call to Azure DevOps"),
+    ("-x put", "PUT API call to Azure DevOps"),
+    ("-x patch", "PATCH API call to Azure DevOps"),
+]
+
 # Git/GitHub write operations requiring confirmation
 GIT_WRITE_PATTERNS = [
     # Git
@@ -277,14 +286,20 @@ async def confirm_azure_write(
 ) -> dict[str, Any]:
     """PreToolUse hook to confirm MCP Azure DevOps write operations.
 
+    Prompts user directly since SDK's 'ask' permissionDecision doesn't
+    trigger interactive prompts.
+
     Args:
         input_data: Contains 'tool_name' and 'tool_input' dict
         tool_use_id: Optional tool use identifier
         context: Hook context
 
     Returns:
-        Empty dict for read operations, confirmation request for writes
+        Empty dict to allow, or deny decision to block
     """
+    import asyncio
+    import sys
+
     tool_name = input_data.get("tool_name", "")
 
     # Only check MCP Azure DevOps tools
@@ -296,24 +311,62 @@ async def confirm_azure_write(
 
     # Check if this is a write operation
     if operation in MCP_ADO_WRITE_OPS:
+        # Pause spinner and flush buffered text before prompting
+        from triagent.cli import flush_buffer, pause_spinner
+
+        pause_spinner()
+        flush_buffer()
+
         description = MCP_ADO_WRITE_OPS[operation]
         tool_input = input_data.get("tool_input", {})
-        # Build a summary of the operation
-        summary_parts = [f"Operation: {description}"]
-        if "title" in tool_input:
-            summary_parts.append(f"Title: {tool_input['title'][:50]}")
-        if "work_item_id" in tool_input:
-            summary_parts.append(f"Work Item: #{tool_input['work_item_id']}")
-        if "pull_request_id" in tool_input:
-            summary_parts.append(f"PR: #{tool_input['pull_request_id']}")
 
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": input_data.get("hook_event_name", "PreToolUse"),
-                "permissionDecision": "ask",
-                "permissionDecisionReason": "\n".join(summary_parts),
+        # Build field lines for display
+        field_lines = []
+        if "title" in tool_input:
+            title = tool_input["title"]
+            if len(title) > 60:
+                title = title[:57] + "..."
+            field_lines.append(f"[cyan]Title:[/cyan] {title}")
+        if "type" in tool_input:
+            field_lines.append(f"[cyan]Type:[/cyan] {tool_input['type']}")
+        if "work_item_id" in tool_input:
+            field_lines.append(f"[cyan]Work Item:[/cyan] #{tool_input['work_item_id']}")
+        if "pull_request_id" in tool_input:
+            field_lines.append(f"[cyan]PR:[/cyan] #{tool_input['pull_request_id']}")
+        if "state" in tool_input:
+            field_lines.append(f"[cyan]State:[/cyan] {tool_input['state']}")
+        if "assigned_to" in tool_input:
+            field_lines.append(f"[cyan]Assigned To:[/cyan] {tool_input['assigned_to']}")
+
+        # Create panel content
+        if field_lines:
+            content = f"[bold]{description}[/bold]\n\n" + "\n".join(field_lines)
+        else:
+            content = f"[bold]{description}[/bold]"
+
+        # Display in a Claude Code-style panel
+        console = Console()
+        console.print()
+        console.print(
+            Panel(content, title="[yellow]Azure DevOps[/yellow]", border_style="yellow")
+        )
+        sys.stdout.flush()
+
+        # Async-compatible input
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, input, "[y]es / [n]o: ")
+        response = response.strip().lower()
+
+        if response in ("y", "yes"):
+            return {}  # Allow - empty dict means proceed
+        else:
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": input_data.get("hook_event_name", "PreToolUse"),
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": "User denied operation",
+                }
             }
-        }
 
     return {}
 
@@ -346,56 +399,69 @@ async def confirm_azure_cli_write(
     command = input_data.get("tool_input", {}).get("command", "")
     command_lower = command.lower()
 
+    # Check for Azure CLI patterns
+    matched_description = None
     for pattern, description in AZURE_CLI_WRITE_PATTERNS:
         if pattern in command_lower:
-            # Pause spinner and flush buffered text before prompting
-            from triagent.cli import flush_buffer, pause_spinner
+            matched_description = description
+            break
 
-            pause_spinner()
-            flush_buffer()
+    # Check for curl-based Azure DevOps API calls
+    if not matched_description and "curl" in command_lower and "dev.azure.com" in command_lower:
+        for pattern, description in CURL_ADO_WRITE_PATTERNS:
+            if pattern in command_lower:
+                matched_description = description
+                break
 
-            # Extract human-readable fields from command
-            fields = extract_command_fields(command)
-            field_lines = "\n".join(
-                f"[cyan]{k}:[/cyan] {v}" for k, v in fields.items()
+    if matched_description:
+        # Pause spinner and flush buffered text before prompting
+        from triagent.cli import flush_buffer, pause_spinner
+
+        pause_spinner()
+        flush_buffer()
+
+        # Extract human-readable fields from command
+        fields = extract_command_fields(command)
+        field_lines = "\n".join(
+            f"[cyan]{k}:[/cyan] {v}" for k, v in fields.items()
+        )
+
+        # Format command for readability
+        formatted_cmd = format_command_readable(command)
+
+        # Create panel content with description, fields, and command
+        if field_lines:
+            content = (
+                f"[bold]{matched_description}[/bold]\n\n"
+                f"{field_lines}\n\n"
+                f"[dim]Command:[/dim]\n[dim]{formatted_cmd}[/dim]"
             )
+        else:
+            content = f"[bold]{matched_description}[/bold]\n\n[dim]{formatted_cmd}[/dim]"
 
-            # Format command for readability
-            formatted_cmd = format_command_readable(command)
+        # Display in a Claude Code-style panel
+        console = Console()
+        console.print()
+        console.print(
+            Panel(content, title="[yellow]Bash[/yellow]", border_style="yellow")
+        )
+        sys.stdout.flush()
 
-            # Create panel content with description, fields, and command
-            if field_lines:
-                content = (
-                    f"[bold]{description}[/bold]\n\n"
-                    f"{field_lines}\n\n"
-                    f"[dim]Command:[/dim]\n[dim]{formatted_cmd}[/dim]"
-                )
-            else:
-                content = f"[bold]{description}[/bold]\n\n[dim]{formatted_cmd}[/dim]"
+        # Async-compatible input
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, input, "[y]es / [n]o: ")
+        response = response.strip().lower()
 
-            # Display in a Claude Code-style panel
-            console = Console()
-            console.print()
-            console.print(
-                Panel(content, title="[yellow]Bash[/yellow]", border_style="yellow")
-            )
-            sys.stdout.flush()
-
-            # Async-compatible input
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(None, input, "[y]es / [n]o: ")
-            response = response.strip().lower()
-
-            if response in ("y", "yes"):
-                return {}  # Allow - empty dict means proceed
-            else:
-                return {
-                    "hookSpecificOutput": {
-                        "hookEventName": input_data.get("hook_event_name", "PreToolUse"),
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": "User denied operation",
-                    }
+        if response in ("y", "yes"):
+            return {}  # Allow - empty dict means proceed
+        else:
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": input_data.get("hook_event_name", "PreToolUse"),
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": "User denied operation",
                 }
+            }
     return {}
 
 
