@@ -2,13 +2,32 @@
 
 This module provides functions to detect and configure Git Bash on Windows,
 which is required by Claude Code CLI to function properly.
+
+Also provides a workaround for Windows command line length limits when using
+the Claude Agent SDK.
 """
 
+import logging
 import os
 import platform
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from claude_agent_sdk._internal.transport.subprocess_cli import (
+        SubprocessCLITransport,
+    )
+
+logger = logging.getLogger(__name__)
+
+# Windows command line length limit (8191 chars, use 8000 for safety)
+_CMD_LENGTH_LIMIT = 8000
+
+# Track if we've already applied the patch
+_sdk_patched = False
 
 
 def is_windows() -> bool:
@@ -127,3 +146,73 @@ def install_git_windows() -> bool:
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
+
+
+def patch_sdk_for_windows() -> None:
+    """Monkey-patch claude_agent_sdk to handle long command lines on Windows.
+
+    The SDK passes system_prompt directly on the command line, which can exceed
+    Windows' ~8000 character limit. This patch writes long prompts to temp
+    files and uses the --system-prompt-file argument instead.
+
+    This is a workaround until the SDK natively handles this case.
+    See: https://github.com/anthropics/claude-code/issues/XXX
+    """
+    global _sdk_patched
+
+    if _sdk_patched or not is_windows():
+        return
+
+    try:
+        from claude_agent_sdk._internal.transport.subprocess_cli import (
+            SubprocessCLITransport,
+        )
+    except ImportError:
+        logger.warning("Could not import SDK transport for patching")
+        return
+
+    # Save original method
+    original_build_command = SubprocessCLITransport._build_command
+
+    def patched_build_command(self: "SubprocessCLITransport") -> list[str]:
+        """Patched _build_command that handles long system_prompt on Windows."""
+        cmd = original_build_command(self)
+
+        # Check command length
+        cmd_str = " ".join(cmd)
+        if len(cmd_str) <= _CMD_LENGTH_LIMIT:
+            return cmd
+
+        # Handle long --system-prompt argument
+        try:
+            sp_idx = cmd.index("--system-prompt")
+            system_prompt_value = cmd[sp_idx + 1]
+
+            if len(system_prompt_value) > _CMD_LENGTH_LIMIT // 2:
+                # Write to temp file (SDK will clean up via self._temp_files)
+                temp_file = tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".txt", delete=False, encoding="utf-8"
+                )
+                temp_file.write(system_prompt_value)
+                temp_file.close()
+
+                # Track for cleanup by the SDK
+                self._temp_files.append(temp_file.name)
+
+                # Change --system-prompt to --system-prompt-file with filepath
+                # Note: @filepath syntax only works for --agents, not --system-prompt
+                cmd[sp_idx] = "--system-prompt-file"
+                cmd[sp_idx + 1] = temp_file.name
+
+                logger.debug(
+                    f"Using --system-prompt-file for long prompt: {temp_file.name}"
+                )
+        except (ValueError, IndexError):
+            pass
+
+        return cmd
+
+    # Apply patch
+    SubprocessCLITransport._build_command = patched_build_command
+    _sdk_patched = True
+    logger.debug("Applied Windows SDK patch for long command lines")

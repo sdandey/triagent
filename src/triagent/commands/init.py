@@ -17,7 +17,6 @@ from triagent.mcp.setup import (
     REQUIRED_AZURE_EXTENSIONS,
     check_azure_cli_installed,
     check_azure_extension,
-    check_claude_code_installed,
     check_nodejs_installed,
     get_azure_account,
     run_azure_login,
@@ -25,7 +24,7 @@ from triagent.mcp.setup import (
 )
 from triagent.skills import get_available_personas
 from triagent.teams.config import TEAM_CONFIG, get_team_config
-from triagent.utils.environment import get_environment_type, is_docker
+from triagent.utils.environment import get_environment_type
 from triagent.utils.windows import find_git_bash, is_windows
 
 AZURE_CLI_INSTALL_URL = "https://docs.microsoft.com/en-us/cli/azure/install-azure-cli"
@@ -173,8 +172,8 @@ def init_command(console: Console, config_manager: ConfigManager) -> bool:
     # Step 5: Azure Authentication (fail gracefully if az not found)
     _step_azure_auth(console, config_manager, report)
 
-    # Step 6: Prerequisites Check (display-only, skip Claude Code in Docker)
-    _step_prerequisites(console, report, skip_claude_code=is_docker())
+    # Step 6: Prerequisites Check (display-only)
+    _step_prerequisites(console, report)
 
     # Save configuration
     config_manager.save_config(config)
@@ -577,17 +576,18 @@ def _step_mcp_setup(
 def _step_prerequisites(
     console: Console,
     report: InitReport,
-    skip_claude_code: bool = False,
 ) -> None:
     """Step 6: Prerequisites Check (display-only, no auto-install).
 
     This step checks for required prerequisites and displays manual
     installation instructions if any are missing. No auto-installation.
 
+    Note: Claude Code CLI check is removed because the claude_agent_sdk
+    package bundles its own CLI binary - npm installation is not required.
+
     Args:
         console: Rich console for output
         report: InitReport to track status
-        skip_claude_code: Skip Claude Code check (e.g., in Docker)
     """
     import os
 
@@ -636,23 +636,11 @@ def _step_prerequisites(
             console.print(f"[green]✓[/green] Git Bash: {bash_path}")
             report.add_success(f"Git Bash: {bash_path}")
         else:
-            console.print("[yellow]○[/yellow] Git Bash not found (required for Claude Code on Windows)")
+            console.print("[yellow]○[/yellow] Git Bash not found (recommended for Windows)")
             missing_prereqs.append("Git for Windows installation required")
-            report.add_warning("Git Bash not found - Claude Code may not work on Windows")
+            report.add_warning("Git Bash not found - some features may not work on Windows")
 
-    # Check Claude Code (skip in Docker)
-    if skip_claude_code:
-        console.print("[dim]○ Claude Code CLI: Skipped (Docker environment)[/dim]")
-        report.add_success("Claude Code CLI: Skipped (Docker)")
-    else:
-        cc_installed, cc_version = check_claude_code_installed()
-        if cc_installed:
-            console.print(f"[green]✓[/green] Claude Code CLI: {cc_version}")
-            report.add_success(f"Claude Code CLI: {cc_version}")
-        else:
-            console.print("[yellow]○[/yellow] Claude Code CLI not found")
-            missing_prereqs.append("npm install -g @anthropic-ai/claude-code")
-            report.add_warning("Claude Code CLI not installed - required for triagent")
+    # Note: Claude Code CLI check removed - SDK bundles its own CLI binary
 
     console.print()
 
@@ -711,14 +699,6 @@ def _show_prerequisites_instructions(
     if any("Git for Windows" in m for m in missing):
         console.print("[bold]Git for Windows Installation:[/bold]")
         console.print("  Download from: https://git-scm.com/download/win")
-        console.print()
-
-    # Claude Code CLI instructions
-    if any("claude-code" in m for m in missing):
-        console.print("[bold]Claude Code CLI:[/bold]")
-        console.print("  npm install -g @anthropic-ai/claude-code")
-        console.print()
-        console.print("[dim]Install Claude Code CLI to use triagent[/dim]")
         console.print()
 
 

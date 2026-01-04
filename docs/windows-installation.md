@@ -2,6 +2,16 @@
 
 This guide covers installing triagent prerequisites on Windows, including AWS WorkSpaces environments.
 
+## Important: Claude Code CLI is Bundled
+
+**You do NOT need to install Claude Code CLI separately.** The `claude-agent-sdk` Python package bundles its own Claude Code CLI binary. When you run `pip install triagent`, the CLI is automatically included.
+
+The only prerequisites you need are:
+- **Python 3.11+** - Runtime for triagent
+- **Git for Windows** - Required by the bundled CLI on Windows
+- **Node.js 18+** - Required for MCP servers (Azure DevOps integration)
+- **Azure CLI** - Optional, for Azure DevOps operations
+
 ## Quick Install
 
 Run the prerequisites installer in PowerShell **as Administrator**:
@@ -87,15 +97,92 @@ Also ensures `C:\Windows\System32` is in PATH (fixes Claude Code VS Code extensi
 Once the installer completes:
 
 1. **Close and reopen PowerShell** (to refresh PATH)
-2. **Open Git Bash** (recommended for running triagent)
-3. **Install triagent**:
+2. **Install triagent**:
    ```bash
    pip install triagent
    ```
-4. **Run triagent**:
+3. **Run triagent**:
    ```bash
    triagent
    ```
+4. **Run the setup wizard** (`/init`) to configure your API provider
+
+## Git Bash Environment Setup (Optional)
+
+If you want to run triagent from Git Bash, you need to configure environment variables in `~/.bashrc` because Windows User environment variables are NOT automatically available in Git Bash.
+
+Add the following to your `~/.bashrc`:
+
+```bash
+# ============================================
+# Triagent Environment Configuration
+# ============================================
+
+# Git Bash path for bundled Claude Code CLI (REQUIRED)
+export CLAUDE_CODE_GIT_BASH_PATH="D:\\Program Files\\Git\\bin\\bash.exe"
+# Or on AWS WorkSpaces:
+# export CLAUDE_CODE_GIT_BASH_PATH="D:\\Users\\$USER\\AppData\\Local\\Programs\\Git\\bin\\bash.exe"
+
+# Azure AI Foundry settings (configure with your values)
+export ANTHROPIC_API_KEY="your-api-key"
+export ANTHROPIC_FOUNDRY_API_KEY="your-api-key"
+export ANTHROPIC_FOUNDRY_RESOURCE="your-resource-name"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
+export CLAUDE_CODE_USE_FOUNDRY="1"
+```
+
+Then reload your shell:
+```bash
+source ~/.bashrc
+```
+
+### Why Is This Needed?
+
+Git Bash (MSYS2/MinGW) initializes its environment independently of Windows. Environment variables set in Windows Control Panel or via PowerShell are not automatically inherited. You must explicitly export them in `~/.bashrc`.
+
+## Azure AI Foundry Configuration
+
+If using Azure AI Foundry as your API provider, you need these environment variables:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | Your Azure AI Foundry API key |
+| `ANTHROPIC_FOUNDRY_API_KEY` | Yes | Same as above (for compatibility) |
+| `ANTHROPIC_FOUNDRY_RESOURCE` | Yes | Your Azure resource name (e.g., `usa-s-mgyg1ysp-eastus2`) |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL` | No | Model deployment name (default: `claude-opus-4-5`) |
+| `CLAUDE_CODE_USE_FOUNDRY` | Yes | Set to `1` to enable Foundry mode |
+| `CLAUDE_CODE_GIT_BASH_PATH` | Yes (Windows) | Path to Git Bash executable |
+
+You can set these in:
+- **Windows**: System Properties > Environment Variables (for PowerShell/CMD)
+- **Git Bash**: `~/.bashrc` file (must be set separately)
+
+## Verification
+
+### PowerShell/CMD
+```powershell
+# Check Python
+python --version   # Should show Python 3.11+
+
+# Check triagent
+triagent --version
+
+# Check environment
+$env:CLAUDE_CODE_GIT_BASH_PATH
+```
+
+### Git Bash
+```bash
+# Check Python
+python --version
+
+# Check triagent
+triagent --version
+
+# Check environment
+echo $CLAUDE_CODE_GIT_BASH_PATH
+echo $ANTHROPIC_API_KEY
+```
 
 ## Command-Line Options
 

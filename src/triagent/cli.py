@@ -33,7 +33,7 @@ from triagent.session_logger import (
 )
 from triagent.skills import get_available_personas
 from triagent.teams.config import get_team_config
-from triagent.utils.windows import find_git_bash, is_windows
+from triagent.utils.windows import find_git_bash, is_windows, patch_sdk_for_windows
 from triagent.versions import (
     AZURE_EXTENSION_VERSIONS,
     CLAUDE_CODE_VERSION,
@@ -778,9 +778,17 @@ async def interactive_loop_async(
                     console.print()
 
         except CLINotFoundError:
-            console.print("[red]Error: Claude CLI not installed[/red]")
+            console.print("[red]Error: Claude Code CLI not found[/red]")
+            console.print()
             console.print(
-                "[dim]Install with: npm install -g @anthropic-ai/claude-code[/dim]"
+                "[dim]This is unexpected - the claude-agent-sdk bundles the CLI.[/dim]"
+            )
+            console.print(
+                "[dim]Try reinstalling: pip install --force-reinstall claude-agent-sdk[/dim]"
+            )
+            console.print()
+            console.print(
+                "[dim]On Windows, also ensure Git for Windows is installed.[/dim]"
             )
             set_activity_tracker(None)
         except ProcessError as e:
@@ -825,6 +833,9 @@ def main(
     Start an interactive chat session using the Claude Agent SDK.
     """
     console = Console()
+
+    # Apply Windows SDK patch for long command lines
+    patch_sdk_for_windows()
 
     if version:
         console.print(f"Triagent CLI v{__version__}")

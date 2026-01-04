@@ -30,9 +30,16 @@
 .PARAMETER SkipAzureCLI
     Skip Azure CLI installation
 
+.PARAMETER ConfigureGitBash
+    Configure Git Bash environment (~/.bashrc) with triagent settings
+
 .EXAMPLE
     # Interactive installation (recommended)
     .\install.ps1
+
+.EXAMPLE
+    # Install prerequisites and configure Git Bash
+    .\install.ps1 -ConfigureGitBash
 
 .EXAMPLE
     # Non-interactive installation
@@ -61,8 +68,38 @@ param(
     [switch]$SkipGit,
 
     [Parameter()]
-    [switch]$SkipAzureCLI
+    [switch]$SkipAzureCLI,
+
+    [Parameter()]
+    [switch]$ConfigureGitBash
 )
+
+# ============================================================================
+# Piped Execution Detection (irm | iex support)
+# ============================================================================
+
+# Detect if running via irm | iex (piped to Invoke-Expression)
+$script:IsPipedExecution = $MyInvocation.CommandOrigin -eq 'Internal' -or
+                           [string]::IsNullOrEmpty($MyInvocation.InvocationName) -or
+                           $MyInvocation.InvocationName -eq '&'
+
+# When piped, param() switches don't work - initialize script-level equivalents
+if ($script:IsPipedExecution) {
+    $script:NonInteractiveMode = $false
+    $script:NoColorMode = $false
+    $script:SkipPythonMode = $false
+    $script:SkipGitMode = $false
+    $script:SkipAzureCLIMode = $false
+    $script:ConfigureGitBashMode = $false
+} else {
+    # Direct execution - copy param values to script variables
+    $script:NonInteractiveMode = $NonInteractive.IsPresent
+    $script:NoColorMode = $NoColor.IsPresent
+    $script:SkipPythonMode = $SkipPython.IsPresent
+    $script:SkipGitMode = $SkipGit.IsPresent
+    $script:SkipAzureCLIMode = $SkipAzureCLI.IsPresent
+    $script:ConfigureGitBashMode = $ConfigureGitBash.IsPresent
+}
 
 # ============================================================================
 # Configuration - Pinned Versions (sync with src/triagent/versions.py)
@@ -76,7 +113,7 @@ $script:GitVersion = "2.47.1"
 # Global Variables
 # ============================================================================
 
-$script:UseColor = -not $NoColor -and $Host.UI.SupportsVirtualTerminal
+$script:UseColor = -not $script:NoColorMode -and $Host.UI.SupportsVirtualTerminal
 $script:LogFile = $null
 $script:InstallDrive = $null
 $script:PythonPath = $null
@@ -251,7 +288,7 @@ function Show-InstallationPaths {
 function Confirm-InstallationPaths {
     param([hashtable]$Paths)
 
-    if ($NonInteractive -or (Test-IsCI)) {
+    if ($script:NonInteractiveMode -or (Test-IsCI)) {
         return $true
     }
 
@@ -666,6 +703,77 @@ function Ensure-System32InPath {
     return $true
 }
 
+function Set-GitBashEnvironment {
+    <#
+    .SYNOPSIS
+        Configure Git Bash environment for triagent.
+    .DESCRIPTION
+        Creates/updates ~/.bashrc with:
+        - CLAUDE_CODE_GIT_BASH_PATH environment variable
+        - Azure AI Foundry environment variable template (commented)
+
+        This is needed because Git Bash does not automatically inherit
+        Windows User environment variables.
+    #>
+    Write-Info "Configuring Git Bash environment..."
+
+    $bashrcPath = Join-Path $env:USERPROFILE ".bashrc"
+    $bashPath = $script:GitPath
+
+    if (-not $bashPath) {
+        # Try to find Git path
+        $bashPath = Find-GitBashPath
+        if (-not $bashPath) {
+            Write-Warn "Cannot configure Git Bash - Git not found"
+            return $false
+        }
+        $bashPath = Split-Path (Split-Path $bashPath -Parent) -Parent
+    }
+
+    $dateStamp = Get-Date -Format 'yyyy-MM-dd'
+
+    $config = @"
+
+# ============================================
+# Triagent Environment Configuration
+# Added by install.ps1 on $dateStamp
+# ============================================
+
+# Git Bash path for bundled Claude Code CLI (REQUIRED on Windows)
+export CLAUDE_CODE_GIT_BASH_PATH="$bashPath\bin\bash.exe"
+
+# Azure AI Foundry settings (configure these with your values)
+# Uncomment and set your actual API key and resource name:
+# export ANTHROPIC_API_KEY="your-api-key"
+# export ANTHROPIC_FOUNDRY_API_KEY="your-api-key"
+# export ANTHROPIC_FOUNDRY_RESOURCE="your-resource-name"
+# export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-5"
+# export CLAUDE_CODE_USE_FOUNDRY="1"
+
+"@
+
+    # Check if already configured
+    if (Test-Path $bashrcPath) {
+        $content = Get-Content $bashrcPath -Raw -ErrorAction SilentlyContinue
+        if ($content -match "Triagent Environment Configuration") {
+            Write-Warn "Git Bash environment already configured in $bashrcPath"
+            Write-Info "To reconfigure, edit $bashrcPath manually"
+            return $true
+        }
+    }
+
+    try {
+        # Append to bashrc (create if doesn't exist)
+        Add-Content -Path $bashrcPath -Value $config -Encoding UTF8
+        Write-Success "Git Bash environment configured: $bashrcPath"
+        Write-Info "  Remember to edit ~/.bashrc and set your API keys"
+        return $true
+    } catch {
+        Write-Err "Failed to configure Git Bash: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 # ============================================================================
 # PATH Management
 # ============================================================================
@@ -792,7 +900,7 @@ function Main {
 
     # Auto-enable non-interactive in CI
     if (Test-IsCI) {
-        $script:NonInteractive = $true
+        $script:NonInteractiveMode = $true
         Write-Info "CI environment detected - running non-interactively"
     }
 
@@ -807,14 +915,14 @@ function Main {
     }
 
     # Step 3: Python Installation
-    if (-not $SkipPython) {
+    if (-not $script:SkipPythonMode) {
         Write-Step "2" "Python Installation"
 
         $python = Find-Python
         if ($python.Found) {
             Write-Success "Python $($python.Version) already installed"
         } else {
-            if ($NonInteractive -or (Test-IsCI)) {
+            if ($script:NonInteractiveMode -or (Test-IsCI)) {
                 $installed = Install-Python
             } else {
                 $response = Read-Host "Python 3.11+ not found. Install Python $($script:PythonVersion)? [Y/n]"
@@ -830,14 +938,14 @@ function Main {
     }
 
     # Step 4: Git Installation
-    if (-not $SkipGit) {
+    if (-not $script:SkipGitMode) {
         Write-Step "3" "Git for Windows Installation"
 
         $git = Find-Git
         if ($git.Found) {
             Write-Success "Git $($git.Version) already installed"
         } else {
-            if ($NonInteractive -or (Test-IsCI)) {
+            if ($script:NonInteractiveMode -or (Test-IsCI)) {
                 $installed = Install-Git
             } else {
                 $response = Read-Host "Git not found. Install Git for Windows $($script:GitVersion)? [Y/n]"
@@ -853,7 +961,7 @@ function Main {
     }
 
     # Step 5: Azure CLI Installation
-    if (-not $SkipAzureCLI) {
+    if (-not $script:SkipAzureCLIMode) {
         Write-Step "4" "Azure CLI Installation"
 
         $az = Find-AzureCLI
@@ -861,7 +969,7 @@ function Main {
             if (Test-AzureCLIVersionOutdated -CurrentVersion $az.Version) {
                 Write-Warn "Azure CLI $($az.Version) is outdated (required: $($script:AzureCLIVersion))"
 
-                if ($NonInteractive -or (Test-IsCI)) {
+                if ($script:NonInteractiveMode -or (Test-IsCI)) {
                     Uninstall-AzureCLI
                     Install-AzureCLI -Upgrade $true
                 } else {
@@ -877,7 +985,7 @@ function Main {
                 Write-Success "Azure CLI $($az.Version) already installed"
             }
         } else {
-            if ($NonInteractive -or (Test-IsCI)) {
+            if ($script:NonInteractiveMode -or (Test-IsCI)) {
                 Install-AzureCLI
             } else {
                 $response = Read-Host "Azure CLI not found. Install Azure CLI $($script:AzureCLIVersion)? [Y/n]"
@@ -898,11 +1006,24 @@ function Main {
     Set-ClaudeCodeEnvironment
     Ensure-System32InPath
 
-    # Step 7: Show Summary
+    # Step 7: Configure Git Bash (optional)
+    if ($script:ConfigureGitBashMode) {
+        Write-Step "6" "Git Bash Configuration"
+        Set-GitBashEnvironment
+    } elseif (-not $script:NonInteractiveMode -and -not (Test-IsCI)) {
+        Write-Host ""
+        Write-Info "Git Bash users: Environment variables must be set in ~/.bashrc"
+        $response = Read-Host "Configure Git Bash environment now? [y/N]"
+        if ($response -match "^[Yy]$") {
+            Set-GitBashEnvironment
+        }
+    }
+
+    # Step 8: Show Summary
     Show-Summary
 
     # Keep terminal open on completion
-    if (-not (Test-IsCI) -and -not $NonInteractive) {
+    if (-not (Test-IsCI) -and -not $script:NonInteractiveMode) {
         Write-Host "Press any key to exit..."
         $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     }

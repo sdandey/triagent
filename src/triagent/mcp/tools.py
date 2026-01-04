@@ -134,6 +134,107 @@ async def list_telemetry_tables_tool(args: dict[str, Any]) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": tables}]}
 
 
+
+
+# Language to skill name mapping for code review guidelines
+LANGUAGE_SKILL_MAP = {
+    "python": "python_code_review",
+    "pyspark": "pyspark_code_review",
+    "dotnet": "dotnet_code_review",
+    "csharp": "dotnet_code_review",
+}
+
+# File extension to language mapping for auto-detection
+EXTENSION_LANGUAGE_MAP = {
+    ".py": "python",
+    ".pyi": "python",
+    ".ipynb": "pyspark",
+    ".cs": "dotnet",
+    ".csproj": "dotnet",
+    ".sln": "dotnet",
+}
+
+
+@tool(
+    "get_code_review_guidelines",
+    "Get code review guidelines for a specific programming language. Use this before reviewing code.",
+    {
+        "type": "object",
+        "properties": {
+            "language": {
+                "type": "string",
+                "description": "Language: 'python', 'pyspark', 'dotnet', or 'auto' for auto-detection",
+                "enum": ["python", "pyspark", "dotnet", "auto"],
+            },
+            "file_extensions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "File extensions for auto-detection when language is 'auto'",
+            },
+        },
+        "required": ["language"],
+    },
+)
+async def get_code_review_guidelines_tool(args: dict[str, Any]) -> dict[str, Any]:
+    """Get code review guidelines for a specific language.
+
+    Call this tool before reviewing code to get the appropriate guidelines.
+
+    Args:
+        args: Dict with 'language' (python/pyspark/dotnet/auto) and optional 'file_extensions'
+
+    Returns:
+        Tool result with code review guidelines content
+    """
+    from triagent.skills.loader import load_skill_by_name
+
+    language = args.get("language", "python")
+    file_extensions = args.get("file_extensions", [])
+
+    # Auto-detect language from file extensions
+    if language == "auto":
+        detected_languages: dict[str, int] = {}
+        for ext in file_extensions:
+            if ext.startswith("."):
+                lang = EXTENSION_LANGUAGE_MAP.get(ext.lower())
+            else:
+                lang = EXTENSION_LANGUAGE_MAP.get(f".{ext.lower()}")
+            if lang:
+                detected_languages[lang] = detected_languages.get(lang, 0) + 1
+
+        if detected_languages:
+            # Use most common language
+            language = max(detected_languages, key=detected_languages.get)
+        else:
+            language = "python"  # Default fallback
+
+    # Get skill name for language
+    skill_name = LANGUAGE_SKILL_MAP.get(language.lower(), "python_code_review")
+
+    # Load skill content
+    content = load_skill_by_name(skill_name)
+
+    if content:
+        text = "Code Review Guidelines for " + language.upper() + ":" + chr(10) + chr(10) + content
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": text,
+                }
+            ]
+        }
+
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": f"No code review guidelines found for language: {language}"
+            }
+        ],
+        "is_error": True,
+    }
+
 def create_triagent_mcp_server():
     """Create in-process MCP server with triagent tools.
 
@@ -147,5 +248,6 @@ def create_triagent_mcp_server():
             get_team_config_tool,
             generate_kusto_query_tool,
             list_telemetry_tables_tool,
+            get_code_review_guidelines_tool,
         ],
     )
